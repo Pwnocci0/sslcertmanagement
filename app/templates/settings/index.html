@@ -1,0 +1,268 @@
+{% extends "base.html" %}
+{% block title %}Einstellungen – SSL Manager{% endblock %}
+
+{% block content %}
+<div class="d-flex align-items-center mb-4">
+  <i class="bi bi-gear-fill fs-3 text-secondary me-2"></i>
+  <h1 class="h3 mb-0">Einstellungen</h1>
+</div>
+
+{% if flash %}
+<div class="alert alert-{{ flash.type }} alert-dismissible fade show" role="alert">
+  {{ flash.msg }}
+  <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+</div>
+{% endif %}
+
+<form method="post" action="/settings/save">
+
+  <!-- Kategorie-Tabs -->
+  <ul class="nav nav-tabs mb-4" id="settingsTabs" role="tablist">
+    {% for cat_key, cat_label in category_labels.items() %}
+    <li class="nav-item" role="presentation">
+      <button class="nav-link {% if loop.first %}active{% endif %}"
+              id="tab-{{ cat_key }}"
+              data-bs-toggle="tab"
+              data-bs-target="#pane-{{ cat_key }}"
+              type="button" role="tab">
+        {% if cat_key == 'general' %}<i class="bi bi-sliders me-1"></i>
+        {% elif cat_key == 'security' %}<i class="bi bi-shield-lock me-1"></i>
+        {% elif cat_key == 'network' %}<i class="bi bi-router me-1"></i>
+        {% elif cat_key == 'certificates' %}<i class="bi bi-patch-check me-1"></i>
+        {% elif cat_key == 'thesslstore' %}<i class="bi bi-shop me-1"></i>
+        {% endif %}
+        {{ cat_label }}
+      </button>
+    </li>
+    {% endfor %}
+  </ul>
+
+  <div class="tab-content">
+    {% for cat_key, items in grouped.items() %}
+    <div class="tab-pane fade {% if loop.first %}show active{% endif %}"
+         id="pane-{{ cat_key }}" role="tabpanel">
+
+      <div class="card shadow-sm">
+        <div class="card-body">
+          {% if cat_key == 'thesslstore' %}
+          <!-- Verbindungstest via POST /health/validate/ -->
+          <div class="d-flex justify-content-end align-items-center mb-3 gap-2">
+            <button type="button" class="btn btn-sm btn-outline-secondary" id="btnTestConn">
+              <i class="bi bi-plug me-1"></i>Verbindung testen
+            </button>
+            <span class="small" id="connResult"></span>
+          </div>
+          {% endif %}
+
+          {% if cat_key == 'thesslstore' %}
+          {# Credentials-Felder gesondert in zwei Karten (Live / Sandbox) darstellen #}
+          {% set cred_keys = ['thesslstore.partner_code_live', 'thesslstore.auth_token_live',
+                              'thesslstore.partner_code_sandbox', 'thesslstore.auth_token_sandbox'] %}
+          {% set other_items = items | selectattr('key', 'ne', 'thesslstore.partner_code_live')
+                                     | selectattr('key', 'ne', 'thesslstore.auth_token_live')
+                                     | selectattr('key', 'ne', 'thesslstore.partner_code_sandbox')
+                                     | selectattr('key', 'ne', 'thesslstore.auth_token_sandbox')
+                                     | list %}
+          {% set live_items = items | selectattr('key', 'in', ['thesslstore.partner_code_live', 'thesslstore.auth_token_live']) | list %}
+          {% set sandbox_items = items | selectattr('key', 'in', ['thesslstore.partner_code_sandbox', 'thesslstore.auth_token_sandbox']) | list %}
+
+          {# Allgemeine Felder (Sandbox-Toggle, URLs, User Agent) #}
+          {% for setting in other_items %}
+          <div class="row mb-3 align-items-start">
+            <label class="col-sm-4 col-form-label fw-semibold" for="s_{{ setting.key }}">
+              {{ setting.label }}
+            </label>
+            <div class="col-sm-8">
+              {% if setting.value_type == 'bool' %}
+                <div class="form-check form-switch mt-2">
+                  <input class="form-check-input" type="checkbox"
+                         role="switch" id="s_{{ setting.key }}" name="{{ setting.key }}"
+                         {% if setting.value and setting.value.lower() in ('true','1','yes','on') %}checked{% endif %}>
+                </div>
+              {% else %}
+                <input type="text" class="form-control" id="s_{{ setting.key }}"
+                       name="{{ setting.key }}" value="{{ setting.display_value }}">
+              {% endif %}
+              {% if setting.description %}
+              <div class="form-text text-muted">{{ setting.description }}</div>
+              {% endif %}
+            </div>
+          </div>
+          {% endfor %}
+
+          <div class="row g-3 mt-1 mb-2">
+            {# Live-Credentials #}
+            <div class="col-md-6">
+              <div class="card border-success">
+                <div class="card-header bg-success bg-opacity-10 fw-semibold">
+                  <i class="bi bi-globe2 me-1 text-success"></i>Live-Zugangsdaten
+                </div>
+                <div class="card-body">
+                  {% for setting in live_items %}
+                  <div class="mb-3">
+                    <label class="form-label fw-semibold" for="s_{{ setting.key }}">
+                      {{ setting.label }}
+                      {% if setting.is_sensitive %}
+                      <i class="bi bi-lock-fill text-muted ms-1" title="Verschlüsselt gespeichert"></i>
+                      {% endif %}
+                    </label>
+                    {% if setting.is_sensitive %}
+                      <input type="password" class="form-control font-monospace"
+                             id="s_{{ setting.key }}" name="{{ setting.key }}"
+                             placeholder="Leer lassen zum Beibehalten"
+                             autocomplete="new-password">
+                      {% if setting.value %}
+                      <div class="form-text text-success">
+                        <i class="bi bi-check-circle me-1"></i>Wert gesetzt
+                      </div>
+                      {% else %}
+                      <div class="form-text text-warning">
+                        <i class="bi bi-exclamation-triangle me-1"></i>Noch nicht konfiguriert
+                      </div>
+                      {% endif %}
+                    {% else %}
+                      <input type="text" class="form-control font-monospace"
+                             id="s_{{ setting.key }}" name="{{ setting.key }}"
+                             value="{{ setting.display_value }}"
+                             placeholder="Live Partner Code">
+                      {% if not setting.value %}
+                      <div class="form-text text-warning">
+                        <i class="bi bi-exclamation-triangle me-1"></i>Noch nicht konfiguriert
+                      </div>
+                      {% endif %}
+                    {% endif %}
+                    {% if setting.description %}
+                    <div class="form-text text-muted">{{ setting.description }}</div>
+                    {% endif %}
+                  </div>
+                  {% endfor %}
+                </div>
+              </div>
+            </div>
+
+            {# Sandbox-Credentials #}
+            <div class="col-md-6">
+              <div class="card border-warning">
+                <div class="card-header bg-warning bg-opacity-10 fw-semibold">
+                  <i class="bi bi-cone-striped me-1 text-warning"></i>Sandbox-Zugangsdaten
+                </div>
+                <div class="card-body">
+                  {% for setting in sandbox_items %}
+                  <div class="mb-3">
+                    <label class="form-label fw-semibold" for="s_{{ setting.key }}">
+                      {{ setting.label }}
+                      {% if setting.is_sensitive %}
+                      <i class="bi bi-lock-fill text-muted ms-1" title="Verschlüsselt gespeichert"></i>
+                      {% endif %}
+                    </label>
+                    {% if setting.is_sensitive %}
+                      <input type="password" class="form-control font-monospace"
+                             id="s_{{ setting.key }}" name="{{ setting.key }}"
+                             placeholder="Leer lassen zum Beibehalten"
+                             autocomplete="new-password">
+                      {% if setting.value %}
+                      <div class="form-text text-success">
+                        <i class="bi bi-check-circle me-1"></i>Wert gesetzt
+                      </div>
+                      {% else %}
+                      <div class="form-text text-warning">
+                        <i class="bi bi-exclamation-triangle me-1"></i>Noch nicht konfiguriert
+                      </div>
+                      {% endif %}
+                    {% else %}
+                      <input type="text" class="form-control font-monospace"
+                             id="s_{{ setting.key }}" name="{{ setting.key }}"
+                             value="{{ setting.display_value }}"
+                             placeholder="Sandbox Partner Code">
+                      {% if not setting.value %}
+                      <div class="form-text text-warning">
+                        <i class="bi bi-exclamation-triangle me-1"></i>Noch nicht konfiguriert
+                      </div>
+                      {% endif %}
+                    {% endif %}
+                    {% if setting.description %}
+                    <div class="form-text text-muted">{{ setting.description }}</div>
+                    {% endif %}
+                  </div>
+                  {% endfor %}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {% else %}
+          {# Alle anderen Kategorien: generische Darstellung #}
+          {% for setting in items %}
+          <div class="row mb-3 align-items-start">
+            <label class="col-sm-4 col-form-label fw-semibold" for="s_{{ setting.key }}">
+              {{ setting.label }}
+              {% if setting.is_sensitive %}
+              <i class="bi bi-lock-fill text-muted ms-1" title="Verschlüsselt gespeichert"></i>
+              {% endif %}
+            </label>
+            <div class="col-sm-8">
+              {% if setting.value_type == 'bool' %}
+                <div class="form-check form-switch mt-2">
+                  <input class="form-check-input" type="checkbox"
+                         role="switch" id="s_{{ setting.key }}"
+                         name="{{ setting.key }}"
+                         {% if setting.value and setting.value.lower() in ('true','1','yes','on') %}checked{% endif %}>
+                </div>
+              {% elif setting.is_sensitive %}
+                <input type="password" class="form-control font-monospace"
+                       id="s_{{ setting.key }}" name="{{ setting.key }}"
+                       placeholder="Leer lassen zum Beibehalten"
+                       autocomplete="new-password">
+                {% if setting.value %}
+                <div class="form-text text-muted">
+                  <i class="bi bi-check-circle text-success me-1"></i>Wert ist gesetzt ({{ setting.display_value }})
+                </div>
+                {% endif %}
+              {% else %}
+                <input type="text" class="form-control"
+                       id="s_{{ setting.key }}" name="{{ setting.key }}"
+                       value="{{ setting.display_value }}">
+              {% endif %}
+              {% if setting.description %}
+              <div class="form-text text-muted">{{ setting.description }}</div>
+              {% endif %}
+            </div>
+          </div>
+          {% endfor %}
+          {% endif %}
+        </div>
+      </div>
+
+    </div>
+    {% endfor %}
+  </div>
+
+  <div class="mt-4 d-flex gap-2">
+    <button type="submit" class="btn btn-primary">
+      <i class="bi bi-floppy me-1"></i>Speichern
+    </button>
+    <a href="/" class="btn btn-outline-secondary">Abbrechen</a>
+  </div>
+</form>
+
+<script>
+document.getElementById('btnTestConn')?.addEventListener('click', async function () {
+  const btn = this;
+  const result = document.getElementById('connResult');
+  btn.disabled = true;
+  result.textContent = 'Teste …';
+  result.className = 'ms-3 align-self-center small text-muted';
+  try {
+    const resp = await fetch('/settings/test-connection', { method: 'POST' });
+    const data = await resp.json();
+    result.textContent = data.message;
+    result.className = 'ms-3 align-self-center small ' + (data.ok ? 'text-success' : 'text-danger');
+  } catch (e) {
+    result.textContent = 'Netzwerkfehler';
+    result.className = 'ms-3 align-self-center small text-danger';
+  } finally {
+    btn.disabled = false;
+  }
+});
+</script>
+{% endblock %}

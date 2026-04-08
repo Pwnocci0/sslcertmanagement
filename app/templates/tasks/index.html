@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+{% block title %}Aufgaben & Handlungsbedarf – SSL Manager{% endblock %}
+
+{% block content %}
+<div class="d-flex align-items-center justify-content-between mb-3">
+  <h4 class="mb-0"><i class="bi bi-list-check me-2"></i>Aufgaben & Handlungsbedarf</h4>
+  <div class="d-flex gap-2">
+    {% if counts.critical > 0 %}
+    <span class="badge bg-danger fs-6">{{ counts.critical }} kritisch</span>
+    {% endif %}
+    {% if counts.danger > 0 %}
+    <span class="badge bg-danger fs-6">{{ counts.danger }} dringend</span>
+    {% endif %}
+    {% if counts.warning > 0 %}
+    <span class="badge bg-warning text-dark fs-6">{{ counts.warning }} Warnung</span>
+    {% endif %}
+    {% if counts.info > 0 %}
+    <span class="badge bg-info text-dark fs-6">{{ counts.info }} Info</span>
+    {% endif %}
+  </div>
+</div>
+
+{% if tasks %}
+<div class="list-group shadow-sm">
+  {% for task in tasks %}
+  <a href="{{ task.url }}" class="list-group-item list-group-item-action list-group-item-{{ task.severity }} d-flex align-items-start gap-3 py-3">
+    <div class="pt-1">
+      <i class="bi {{ task.icon }} fs-5"></i>
+    </div>
+    <div class="flex-grow-1">
+      <div class="fw-semibold">{{ task.title }}</div>
+      <div class="small text-muted">{{ task.detail }}</div>
+    </div>
+    {% if task.days is not none %}
+    <div class="text-end text-nowrap small pt-1">
+      {% if task.days == 0 %}
+      <span class="badge bg-danger">Abgelaufen</span>
+      {% elif task.days <= 7 %}
+      <span class="badge bg-danger">{{ task.days }}d</span>
+      {% elif task.days <= 30 %}
+      <span class="badge bg-warning text-dark">{{ task.days }}d</span>
+      {% else %}
+      <span class="badge bg-secondary">{{ task.days }}d</span>
+      {% endif %}
+    </div>
+    {% endif %}
+  </a>
+  {% endfor %}
+</div>
+{% else %}
+<div class="card border-success shadow-sm">
+  <div class="card-body text-center py-5">
+    <i class="bi bi-check-circle-fill text-success fs-1"></i>
+    <h5 class="mt-3">Kein Handlungsbedarf</h5>
+    <p class="text-muted">Alle Zertifikate und Bestellungen sind in Ordnung.</p>
+  </div>
+</div>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,85 @@
+{% extends "base.html" %}
+{% block title %}Kunden-Defaults – {{ customer.name }} – SSL Manager{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-md-7">
+    <div class="card shadow-sm">
+      <div class="card-header">
+        <i class="bi bi-sliders me-1"></i>Kunden-Defaults: <strong>{{ customer.name }}</strong>
+      </div>
+      <div class="card-body">
+        <p class="text-muted">Diese Werte werden beim Erstellen neuer CSRs für diesen Kunden automatisch vorausgefüllt.</p>
+
+        <form method="post">
+          <div class="row g-2 mb-3">
+            <div class="col-2">
+              <label class="form-label">Land</label>
+              <input type="text" name="default_country" class="form-control text-uppercase"
+                     maxlength="2" value="{{ defaults.default_country if defaults and defaults.default_country else '' }}"
+                     placeholder="DE">
+            </div>
+            <div class="col-5">
+              <label class="form-label">Bundesland</label>
+              <input type="text" name="default_state" class="form-control"
+                     value="{{ defaults.default_state if defaults and defaults.default_state else '' }}">
+            </div>
+            <div class="col-5">
+              <label class="form-label">Ort</label>
+              <input type="text" name="default_locality" class="form-control"
+                     value="{{ defaults.default_locality if defaults and defaults.default_locality else '' }}">
+            </div>
+          </div>
+
+          <div class="row g-2 mb-3">
+            <div class="col-6">
+              <label class="form-label">Organisation</label>
+              <input type="text" name="default_org" class="form-control"
+                     value="{{ defaults.default_org if defaults and defaults.default_org else '' }}">
+            </div>
+            <div class="col-6">
+              <label class="form-label">Abteilung (OU)</label>
+              <input type="text" name="default_ou" class="form-control"
+                     value="{{ defaults.default_ou if defaults and defaults.default_ou else '' }}">
+            </div>
+          </div>
+
+          <div class="row g-2 mb-3">
+            <div class="col-6">
+              <label class="form-label">Bevorzugte Laufzeit (Tage)</label>
+              <input type="number" name="preferred_validity_days" class="form-control"
+                     value="{{ defaults.preferred_validity_days if defaults and defaults.preferred_validity_days else '' }}"
+                     placeholder="z.B. 365">
+            </div>
+            <div class="col-6">
+              <label class="form-label">Bevorzugtes Produkt-SKU</label>
+              <input type="text" name="preferred_product_sku" class="form-control font-monospace"
+                     value="{{ defaults.preferred_product_sku if defaults and defaults.preferred_product_sku else '' }}"
+                     placeholder="z.B. COMODO_EV_SSL">
+            </div>
+          </div>
+
+          <div class="mb-3">
+            <label class="form-label">Validierungshinweise</label>
+            <textarea name="validation_notes" class="form-control" rows="3"
+                      placeholder="Interne Hinweise zur Domain-Validierung, Kontaktpersonen...">{{ defaults.validation_notes if defaults and defaults.validation_notes else '' }}</textarea>
+          </div>
+
+          <div class="mb-4">
+            <label class="form-label">Technische Hinweise</label>
+            <textarea name="technical_notes" class="form-control" rows="3"
+                      placeholder="Serverplattform, Besonderheiten bei der Installation...">{{ defaults.technical_notes if defaults and defaults.technical_notes else '' }}</textarea>
+          </div>
+
+          <div class="d-flex gap-2">
+            <button type="submit" class="btn btn-primary">
+              <i class="bi bi-save me-1"></i>Speichern
+            </button>
+            <a href="/customers/{{ customer.id }}" class="btn btn-outline-secondary">Abbrechen</a>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

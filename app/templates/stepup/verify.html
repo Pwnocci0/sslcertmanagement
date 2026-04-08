@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+{% block title %}Bestätigung erforderlich – SSL Manager{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-md-5">
+    <div class="card shadow-sm border-warning">
+      <div class="card-header bg-warning text-dark">
+        <i class="bi bi-shield-lock-fill me-2"></i>
+        <strong>Sicherheitsbestätigung erforderlich</strong>
+      </div>
+      <div class="card-body">
+        <p class="text-muted mb-3">
+          Die folgende Aktion erfordert eine erneute Authentifizierung:
+        </p>
+        <div class="alert alert-secondary py-2 mb-4">
+          <i class="bi bi-key-fill me-1"></i> <strong>{{ action_label }}</strong>
+        </div>
+
+        {% if error %}
+        <div class="alert alert-danger py-2">
+          <i class="bi bi-x-circle-fill me-1"></i> {{ error }}
+        </div>
+        {% endif %}
+
+        <form method="post" action="/stepup/verify">
+          <input type="hidden" name="action" value="{{ action }}">
+          <input type="hidden" name="next_url" value="{{ next_url }}">
+
+          <div class="mb-3">
+            <label class="form-label">Passwort</label>
+            <input type="password" name="password" class="form-control" required autofocus
+                   placeholder="Ihr Login-Passwort">
+          </div>
+
+          <div class="mb-3">
+            <label class="form-label">TOTP-Code (Authenticator-App)</label>
+            <input type="text" name="totp_code" class="form-control font-monospace"
+                   required maxlength="6" inputmode="numeric" placeholder="6-stelliger Code">
+          </div>
+
+          <div class="mb-4">
+            <label class="form-label text-muted">Begründung <span class="text-muted">(optional)</span></label>
+            <input type="text" name="reason" class="form-control"
+                   placeholder="z.B. Kundenprojekt XY, Ticket #123">
+          </div>
+
+          <div class="d-grid gap-2">
+            <button type="submit" class="btn btn-warning">
+              <i class="bi bi-unlock-fill me-1"></i> Bestätigen und fortfahren
+            </button>
+            <a href="/" class="btn btn-outline-secondary">Abbrechen</a>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

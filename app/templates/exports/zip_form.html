@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+{% block title %}ZIP-Export – {{ cert.common_name }} – SSL Manager{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-md-6">
+    <div class="card shadow-sm">
+      <div class="card-header">
+        <i class="bi bi-file-zip me-1"></i>ZIP-Export: <strong>{{ cert.common_name }}</strong>
+      </div>
+      <div class="card-body">
+        <p class="text-muted">Wählen Sie aus, welche Dateien in das ZIP-Paket aufgenommen werden sollen.</p>
+
+        <form method="post">
+          <div class="list-group mb-4">
+            <label class="list-group-item d-flex gap-3">
+              <input class="form-check-input flex-shrink-0" type="checkbox" checked disabled>
+              <span>
+                <strong>Zertifikat</strong> (<code>.crt.pem</code>)
+                <div class="text-muted small">Das Leaf-Zertifikat (immer enthalten).</div>
+              </span>
+            </label>
+
+            <label class="list-group-item d-flex gap-3">
+              <input class="form-check-input flex-shrink-0" type="checkbox"
+                     name="include_chain" value="on" {% if not cert.chain_pem %}disabled{% else %}checked{% endif %}>
+              <span>
+                <strong>Chain-Zertifikat</strong> (<code>.chain.pem</code> + <code>.fullchain.pem</code>)
+                <div class="text-muted small">
+                  {% if cert.chain_pem %}Intermediate-Chain vorhanden.{% else %}<span class="text-warning">Kein Chain-Zertifikat vorhanden.</span>{% endif %}
+                </div>
+              </span>
+            </label>
+
+            <label class="list-group-item d-flex gap-3">
+              <input class="form-check-input flex-shrink-0" type="checkbox"
+                     name="include_key" value="on"
+                     {% if not has_key %}disabled{% endif %}
+                     id="includeKey">
+              <span>
+                <strong>Private Key</strong> (<code>.key.pem</code>)
+                <div class="text-muted small">
+                  {% if has_key %}
+                  <span class="text-warning"><i class="bi bi-shield-lock me-1"></i>Erfordert Step-up-Authentifizierung (Passwort + TOTP).</span>
+                  {% else %}
+                  <span class="text-muted">Kein Private Key verknüpft.</span>
+                  {% endif %}
+                </div>
+              </span>
+            </label>
+
+            <label class="list-group-item d-flex gap-3">
+              <input class="form-check-input flex-shrink-0" type="checkbox"
+                     name="include_meta" value="on" checked>
+              <span>
+                <strong>Metadaten</strong> (<code>_info.txt</code>)
+                <div class="text-muted small">CN, SANs, Aussteller, Gültigkeitszeitraum, Exportinfo.</div>
+              </span>
+            </label>
+          </div>
+
+          <div class="d-flex gap-2">
+            <button type="submit" class="btn btn-success">
+              <i class="bi bi-download me-1"></i>ZIP herunterladen
+            </button>
+            <a href="/certificates/{{ cert.id }}" class="btn btn-outline-secondary">Abbrechen</a>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,137 @@
+{% extends "base.html" %}
+{% block title %}System-Status – SSL Manager{% endblock %}
+
+{% block content %}
+<h4 class="mb-4"><i class="bi bi-tools me-2"></i>System-Status & Administration</h4>
+
+{% if status.config_warnings %}
+<div class="alert alert-danger">
+  <strong><i class="bi bi-exclamation-triangle-fill me-1"></i>Konfigurationsprobleme:</strong>
+  <ul class="mb-0 mt-1">
+    {% for w in status.config_warnings %}
+    <li>{{ w }}</li>
+    {% endfor %}
+  </ul>
+</div>
+{% endif %}
+
+{% if status.sandbox_mode %}
+<div class="alert alert-warning">
+  <i class="bi bi-cone-striped me-1"></i>
+  <strong>Sandbox-Modus aktiv</strong> – TheSSLStore-Bestellungen werden nicht live verarbeitet.
+</div>
+{% endif %}
+
+<div class="row g-3 mb-4">
+  <div class="col-md-3">
+    <div class="card text-center h-100">
+      <div class="card-body">
+        <div class="fs-2 fw-bold text-primary">{{ status.total_certs }}</div>
+        <div class="text-muted small">Zertifikate gesamt</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-3">
+    <div class="card text-center h-100">
+      <div class="card-body">
+        <div class="fs-2 fw-bold text-success">{{ status.active_certs }}</div>
+        <div class="text-muted small">Aktive Zertifikate</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-3">
+    <div class="card text-center h-100">
+      <div class="card-body">
+        <div class="fs-2 fw-bold {% if status.expiring_30 > 0 %}text-warning{% else %}text-muted{% endif %}">{{ status.expiring_30 }}</div>
+        <div class="text-muted small">Laufen in 30 Tagen ab</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-3">
+    <div class="card text-center h-100">
+      <div class="card-body">
+        <div class="fs-2 fw-bold text-info">{{ status.csr_count }}</div>
+        <div class="text-muted small">CSRs im Vault</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="row g-3">
+  <div class="col-md-6">
+    <div class="card h-100">
+      <div class="card-header"><i class="bi bi-cpu me-1"></i>Systeminfo</div>
+      <div class="card-body">
+        <table class="table table-sm mb-0">
+          <tbody>
+            <tr><th class="w-50">Applikations-Version</th><td>{{ status.app_version }}</td></tr>
+            <tr><th>Python-Version</th><td>{{ status.python_version }}</td></tr>
+            <tr><th>Plattform</th><td>{{ status.platform }}</td></tr>
+            <tr><th>Install-Verzeichnis</th><td class="font-monospace small">{{ status.install_dir }}</td></tr>
+            <tr><th>Datenbank-Pfad</th><td class="font-monospace small">{{ status.db_path }}</td></tr>
+            <tr>
+              <th>Datenbankstatus</th>
+              <td>
+                {% if status.db_status.ok %}
+                <span class="badge bg-success">{{ status.db_status.msg }}</span>
+                {% else %}
+                <span class="badge bg-danger">{{ status.db_status.msg }}</span>
+                {% endif %}
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-md-6">
+    <div class="card h-100">
+      <div class="card-header"><i class="bi bi-shop me-1"></i>TheSSLStore-Sync</div>
+      <div class="card-body">
+        <table class="table table-sm mb-0">
+          <tbody>
+            <tr>
+              <th class="w-50">Letzter Produkt-Sync</th>
+              <td>{% if status.last_product_sync %}{{ status.last_product_sync.strftime('%d.%m.%Y %H:%M') }} UTC{% else %}<span class="text-muted">–</span>{% endif %}</td>
+            </tr>
+            <tr>
+              <th>Letzter Order-Sync</th>
+              <td>{% if status.last_order_sync %}{{ status.last_order_sync.strftime('%d.%m.%Y %H:%M') }} UTC{% else %}<span class="text-muted">–</span>{% endif %}</td>
+            </tr>
+            <tr>
+              <th>Offene Bestellungen</th>
+              <td>{{ status.open_orders }}</td>
+            </tr>
+            <tr>
+              <th>Modus</th>
+              <td>{% if status.sandbox_mode %}<span class="badge bg-warning text-dark">Sandbox</span>{% else %}<span class="badge bg-success">Live</span>{% endif %}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-12">
+    <div class="card border-info">
+      <div class="card-header bg-info bg-opacity-10">
+        <i class="bi bi-floppy2 me-1"></i>Backup-Hinweise
+      </div>
+      <div class="card-body">
+        <p class="mb-2">Folgende Dateien/Verzeichnisse sollten regelmäßig gesichert werden:</p>
+        <ul class="mb-3">
+          <li><code class="font-monospace">{{ status.db_path }}</code> – SQLite-Datenbank (Zertifikate, CSRs, Einstellungen)</li>
+          <li><code class="font-monospace">{{ status.data_dir }}/</code> – Data-Verzeichnis (gesamtes Verzeichnis)</li>
+          <li><strong>.env-Datei</strong> – Enthält APP_SECRET_KEY, CSR_KEY_PASSPHRASE – separat und verschlüsselt sichern!</li>
+        </ul>
+        <div class="alert alert-warning py-2 mb-0">
+          <i class="bi bi-exclamation-triangle-fill me-1"></i>
+          <strong>Wichtig:</strong> Ohne <code>CSR_KEY_PASSPHRASE</code> sind alle verschlüsselten Private Keys im Vault nicht entschlüsselbar.
+          Diese Passphrase muss getrennt von der Datenbank sicher verwahrt werden.
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

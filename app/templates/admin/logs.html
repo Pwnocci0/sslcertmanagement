@@ -1,0 +1,168 @@
+{% extends "base.html" %}
+{% block title %}Anwendungslogs – SSL Manager{% endblock %}
+
+{% block content %}
+<div class="d-flex align-items-center mb-3">
+  <i class="bi bi-journal-text fs-3 text-secondary me-2"></i>
+  <h1 class="h3 mb-0">Anwendungslogs</h1>
+  <a href="/admin" class="btn btn-sm btn-outline-secondary ms-auto">
+    <i class="bi bi-arrow-left me-1"></i>System-Status
+  </a>
+</div>
+
+{% if not log_file_exists %}
+<div class="alert alert-warning">
+  <i class="bi bi-exclamation-triangle me-2"></i>
+  Log-Datei noch nicht vorhanden (<code>{{ log_file_path }}</code>).
+  Sie wird beim ersten Log-Eintrag automatisch erstellt.
+</div>
+{% endif %}
+
+<!-- Filter-Leiste -->
+<form method="get" action="/admin/logs" class="card shadow-sm mb-3">
+  <div class="card-body py-2">
+    <div class="row g-2 align-items-end">
+
+      <div class="col-auto">
+        <label class="form-label small mb-1">Kategorie</label>
+        <div class="btn-group btn-group-sm" role="group">
+          {% for cat_key, cat_label in categories.items() %}
+          <input type="radio" class="btn-check" name="category" id="cat_{{ cat_key }}"
+                 value="{{ cat_key }}" autocomplete="off"
+                 {% if category == cat_key %}checked{% endif %}>
+          <label class="btn btn-outline-secondary" for="cat_{{ cat_key }}">
+            {% if cat_key == 'thesslstore' %}<i class="bi bi-shop me-1"></i>{% endif %}
+            {% if cat_key == 'uvicorn' %}<i class="bi bi-router me-1"></i>{% endif %}
+            {% if cat_key == 'app' %}<i class="bi bi-app me-1"></i>{% endif %}
+            {% if cat_key == 'all' %}<i class="bi bi-list-ul me-1"></i>{% endif %}
+            {{ cat_label }}
+          </label>
+          {% endfor %}
+        </div>
+      </div>
+
+      <div class="col-auto">
+        <label class="form-label small mb-1">Min. Level</label>
+        <div class="btn-group btn-group-sm" role="group">
+          {% for lvl in levels %}
+          <input type="radio" class="btn-check" name="level" id="lvl_{{ lvl }}"
+                 value="{{ lvl }}" autocomplete="off"
+                 {% if level == lvl %}checked{% endif %}>
+          <label class="btn btn-outline-secondary" for="lvl_{{ lvl }}">{{ lvl }}</label>
+          {% endfor %}
+        </div>
+      </div>
+
+      <div class="col-auto">
+        <label class="form-label small mb-1">Anzahl Zeilen</label>
+        <select name="limit" class="form-select form-select-sm" style="width:auto">
+          {% for n in [100, 200, 500, 1000, 2000] %}
+          <option value="{{ n }}" {% if limit == n %}selected{% endif %}>{{ n }}</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div class="col-auto">
+        <button type="submit" class="btn btn-sm btn-primary">
+          <i class="bi bi-funnel me-1"></i>Filtern
+        </button>
+        <a href="/admin/logs" class="btn btn-sm btn-outline-secondary ms-1">
+          <i class="bi bi-x-circle me-1"></i>Zurücksetzen
+        </a>
+      </div>
+
+      <div class="col-auto ms-auto">
+        <span class="text-muted small">
+          <i class="bi bi-file-text me-1"></i>
+          <code class="small">{{ log_file_path }}</code>
+        </span>
+      </div>
+
+    </div>
+  </div>
+</form>
+
+<!-- Ergebnis-Info -->
+<div class="d-flex justify-content-between align-items-center mb-2">
+  <span class="text-muted small">
+    {{ entries | length }} Einträge (neueste zuerst)
+    {% if entries | length == limit %}
+    – <span class="text-warning">Limit erreicht, ältere Einträge nicht angezeigt</span>
+    {% endif %}
+  </span>
+  <button class="btn btn-sm btn-outline-secondary" onclick="location.reload()">
+    <i class="bi bi-arrow-clockwise me-1"></i>Aktualisieren
+  </button>
+</div>
+
+{% if not entries %}
+<div class="alert alert-info">
+  <i class="bi bi-info-circle me-2"></i>
+  Keine Einträge für den gewählten Filter gefunden.
+</div>
+{% else %}
+
+<!-- Log-Tabelle -->
+<div class="table-responsive" style="max-height: 75vh; overflow-y: auto;">
+  <table class="table table-sm table-hover font-monospace small align-middle mb-0" id="logTable">
+    <thead class="table-dark sticky-top">
+      <tr>
+        <th style="white-space:nowrap; width:145px">Zeitstempel</th>
+        <th style="width:80px">Level</th>
+        <th style="width:260px">Logger</th>
+        <th>Meldung</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for e in entries %}
+      {% set row_class = {
+          'ERROR':    'table-danger',
+          'CRITICAL': 'table-danger',
+          'WARNING':  'table-warning',
+          'DEBUG':    'text-muted',
+      }.get(e.level, '') %}
+      <tr class="{{ row_class }}">
+        <td class="text-muted" style="white-space:nowrap">{{ e.ts }}</td>
+        <td>
+          {% if e.level in ('ERROR', 'CRITICAL') %}
+            <span class="badge bg-danger">{{ e.level }}</span>
+          {% elif e.level == 'WARNING' %}
+            <span class="badge bg-warning text-dark">{{ e.level }}</span>
+          {% elif e.level == 'INFO' %}
+            <span class="badge bg-info text-dark">{{ e.level }}</span>
+          {% else %}
+            <span class="badge bg-secondary">{{ e.level }}</span>
+          {% endif %}
+        </td>
+        <td class="text-muted" style="word-break:break-all">{{ e.logger }}</td>
+        <td style="white-space:pre-wrap; word-break:break-word">{{ e.message }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+{% endif %}
+
+<script>
+// Suchfeld für schnelle Client-seitige Filterung
+document.addEventListener('DOMContentLoaded', function () {
+  const searchBox = document.createElement('input');
+  searchBox.type = 'search';
+  searchBox.placeholder = 'In Meldungen suchen …';
+  searchBox.className = 'form-control form-control-sm';
+  searchBox.style.maxWidth = '320px';
+
+  const infoRow = document.querySelector('.d-flex.justify-content-between');
+  if (infoRow) infoRow.appendChild(searchBox);
+
+  searchBox.addEventListener('input', function () {
+    const q = this.value.toLowerCase();
+    document.querySelectorAll('#logTable tbody tr').forEach(function (row) {
+      const text = row.textContent.toLowerCase();
+      row.style.display = (!q || text.includes(q)) ? '' : 'none';
+    });
+  });
+});
+</script>
+{% endblock %}

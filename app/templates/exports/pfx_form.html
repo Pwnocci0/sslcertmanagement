@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+{% block title %}PFX-Export – {{ cert.common_name }} – SSL Manager{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-md-6">
+    <div class="card shadow-sm border-warning">
+      <div class="card-header bg-warning text-dark">
+        <i class="bi bi-file-earmark-binary me-1"></i>PFX/PKCS#12-Export: <strong>{{ cert.common_name }}</strong>
+      </div>
+      <div class="card-body">
+        <div class="alert alert-warning py-2 mb-3">
+          <i class="bi bi-shield-lock-fill me-1"></i>
+          <strong>Sicherheitshinweis:</strong> Dieser Export enthält den Private Key.
+          Die Aktion wird vollständig protokolliert und erfordert Step-up-Authentifizierung.
+        </div>
+
+        <p class="text-muted">
+          Das PFX-Paket enthält Zertifikat, Intermediate-Chain und Private Key in einer passwortgeschützten Datei.
+        </p>
+
+        {% if flash and flash.type == 'danger' %}
+        <div class="alert alert-danger py-2">
+          <i class="bi bi-x-circle-fill me-1"></i> {{ flash.msg }}
+        </div>
+        {% endif %}
+
+        <form method="post">
+          <div class="mb-3">
+            <label class="form-label fw-semibold">Export-Passwort <span class="text-danger">*</span></label>
+            <input type="password" name="export_password" class="form-control"
+                   required minlength="1" placeholder="Passwort für die PFX-Datei" autofocus>
+            <div class="form-text">Mit diesem Passwort wird die PFX-Datei verschlüsselt.</div>
+          </div>
+
+          <div class="mb-4">
+            <label class="form-label fw-semibold">Passwort bestätigen <span class="text-danger">*</span></label>
+            <input type="password" name="export_password2" class="form-control"
+                   required placeholder="Passwort wiederholen">
+          </div>
+
+          <div class="d-flex gap-2">
+            <button type="submit" class="btn btn-warning">
+              <i class="bi bi-download me-1"></i>PFX herunterladen
+            </button>
+            <a href="/certificates/{{ cert.id }}" class="btn btn-outline-secondary">Abbrechen</a>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

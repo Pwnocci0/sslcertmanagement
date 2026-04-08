@@ -1,0 +1,58 @@
+body {
+  background-color: #f5f6fa;
+}
+
+.navbar {
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+}
+
+.card {
+  border-radius: 0.5rem;
+}
+
+.card-header {
+  border-bottom: 1px solid #e9ecef;
+  padding: 0.75rem 1rem;
+}
+
+.table th {
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #6c757d;
+  font-weight: 600;
+}
+
+.table td {
+  vertical-align: middle;
+}
+
+main {
+  max-width: 1400px;
+  margin: 0 auto;
+}
+
+/* Ablauf-Schwelle 30–60 Tage (Bootstrap hat kein Orange) */
+.badge-exp-60 {
+  background-color: #fd7e14;
+  color: #fff;
+}
+
+.btn-exp-60 {
+  color: #fd7e14;
+  border-color: #fd7e14;
+}
+
+.btn-exp-60:hover {
+  background-color: #fd7e14;
+  color: #fff;
+}
+
+.table-exp-60 {
+  --bs-table-bg: rgba(253, 126, 20, 0.08);
+  --bs-table-color: inherit;
+}
+
+.exp-60-text {
+  color: #fd7e14;
+}

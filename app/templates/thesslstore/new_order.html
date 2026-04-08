@@ -1,0 +1,157 @@
+{% extends "base.html" %}
+{% block title %}Neue Bestellung – TheSSLStore – SSL Manager{% endblock %}
+
+{% block content %}
+<div class="d-flex align-items-center mb-4 gap-2">
+  <a href="/thesslstore" class="btn btn-sm btn-outline-secondary">
+    <i class="bi bi-arrow-left"></i>
+  </a>
+  <i class="bi bi-plus-circle fs-3 text-primary"></i>
+  <h1 class="h3 mb-0">Neue Bestellung</h1>
+</div>
+
+{% if flash %}
+<div class="alert alert-{{ flash.type }} alert-dismissible fade show" role="alert">
+  {{ flash.msg }}
+  <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+</div>
+{% endif %}
+
+{% if not products %}
+<div class="alert alert-warning">
+  <i class="bi bi-exclamation-triangle me-1"></i>
+  Keine Produkte im lokalen Cache. Bitte zuerst
+  <a href="/thesslstore">Produkte synchronisieren</a>.
+</div>
+{% endif %}
+
+<form method="post" action="/thesslstore/new-order">
+
+  <div class="card shadow-sm mb-4">
+    <div class="card-header fw-semibold">
+      <i class="bi bi-patch-check me-1"></i>Zertifikat &amp; CSR
+    </div>
+    <div class="card-body">
+      {% if cert %}
+      <dl class="row mb-2">
+        <dt class="col-sm-3">Zertifikat</dt>
+        <dd class="col-sm-9">
+          <a href="/certificates/{{ cert.id }}">{{ cert.common_name }}</a>
+          <input type="hidden" name="certificate_id" value="{{ cert.id }}">
+        </dd>
+        {% if csr %}
+        <dt class="col-sm-3">CSR (Common Name)</dt>
+        <dd class="col-sm-9 font-monospace">{{ csr.common_name }}</dd>
+        {% if csr.organization %}
+        <dt class="col-sm-3">Organisation</dt>
+        <dd class="col-sm-9">{{ csr.organization }}</dd>
+        {% endif %}
+        {% if csr.country %}
+        <dt class="col-sm-3">Land</dt>
+        <dd class="col-sm-9">{{ csr.country }}</dd>
+        {% endif %}
+        {% else %}
+        <dt class="col-sm-3">CSR</dt>
+        <dd class="col-sm-9 text-danger">
+          <i class="bi bi-exclamation-triangle me-1"></i>Kein CSR mit diesem Zertifikat verknüpft.
+        </dd>
+        {% endif %}
+      </dl>
+      {% else %}
+      <div class="mb-3">
+        <label class="form-label fw-semibold">Zertifikat-ID</label>
+        <input type="number" class="form-control" name="certificate_id"
+               placeholder="ID des Zertifikats" required>
+        <div class="form-text">Das Zertifikat muss einen verknüpften CSR haben.</div>
+      </div>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="card shadow-sm mb-4">
+    <div class="card-header fw-semibold">
+      <i class="bi bi-box-seam me-1"></i>Produkt &amp; Laufzeit
+    </div>
+    <div class="card-body">
+      <div class="row g-3">
+        <div class="col-md-6">
+          <label class="form-label fw-semibold">Produkt (SKU)</label>
+          <select class="form-select" name="sku" required>
+            <option value="">– bitte wählen –</option>
+            {% for p in products %}
+            <option value="{{ p.sku }}">
+              {{ p.name }}
+              ({{ p.sku }})
+              {% if p.is_ev %} [EV]{% endif %}
+              {% if p.is_ov %} [OV]{% endif %}
+              {% if p.is_dv %} [DV]{% endif %}
+              {% if p.is_wildcard %} [Wildcard]{% endif %}
+            </option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="col-md-2">
+          <label class="form-label fw-semibold">Laufzeit (Monate)</label>
+          <input type="number" class="form-control" name="validity_period" value="12" min="1" max="36">
+        </div>
+        <div class="col-md-2">
+          <label class="form-label fw-semibold">Server-Lizenzen</label>
+          <input type="number" class="form-control" name="server_count" value="1" min="1">
+        </div>
+        <div class="col-md-2">
+          <label class="form-label fw-semibold">SANs</label>
+          <input type="number" class="form-control" name="san_count" value="0" min="0">
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card shadow-sm mb-4">
+    <div class="card-header fw-semibold">
+      <i class="bi bi-shield-check me-1"></i>Domain Control Validation
+    </div>
+    <div class="card-body">
+      <div class="row g-3">
+        <div class="col-md-4">
+          <label class="form-label fw-semibold">DCV-Methode</label>
+          <select class="form-select" name="dcv_method" id="dcvMethod">
+            <option value="EMAIL">E-Mail (EMAIL)</option>
+            <option value="HTTP">HTTP-Datei (FileAuthDVIndicator)</option>
+            <option value="HTTPS">HTTPS-Datei (HTTPSFileAuthDVIndicator)</option>
+            <option value="CNAME">DNS CNAME (CNAMEAuthDVIndicator)</option>
+          </select>
+          <div class="form-text">Laut TheSSLStore API-Dokumentation.</div>
+        </div>
+        <div class="col-md-8" id="approverEmailGroup">
+          <label class="form-label fw-semibold">Approver-E-Mail</label>
+          <select class="form-select" name="approver_email" id="approverEmailSelect">
+            {% if approver_emails %}
+              {% for email in approver_emails %}
+              <option value="{{ email }}">{{ email }}</option>
+              {% endfor %}
+            {% else %}
+            <option value="">– Produkt und Zertifikat wählen –</option>
+            {% endif %}
+          </select>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="d-flex gap-2">
+    <button type="submit" class="btn btn-primary" {% if not csr or not products %}disabled{% endif %}>
+      <i class="bi bi-send me-1"></i>Bestellung absenden
+    </button>
+    <a href="/thesslstore" class="btn btn-outline-secondary">Abbrechen</a>
+  </div>
+
+</form>
+
+<script>
+// Approver-E-Mail-Gruppe ausblenden wenn nicht EMAIL-Methode
+document.getElementById('dcvMethod')?.addEventListener('change', function () {
+  const group = document.getElementById('approverEmailGroup');
+  group.style.display = this.value === 'EMAIL' ? '' : 'none';
+});
+</script>
+{% endblock %}

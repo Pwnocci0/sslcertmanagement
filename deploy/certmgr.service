@@ -1,0 +1,33 @@
+[Unit]
+Description=SSL Cert Management
+Documentation=https://github.com/yourorg/sslcertmanagement
+After=network.target
+
+[Service]
+Type=simple
+User=%%APP_USER%%
+Group=%%APP_USER%%
+WorkingDirectory=%%INSTALL_DIR%%
+EnvironmentFile=%%INSTALL_DIR%%/.env
+
+ExecStart=%%INSTALL_DIR%%/.venv/bin/uvicorn app.main:app \
+    --host %%APP_HOST%% \
+    --port %%APP_PORT%% \
+    --workers 1 \
+    --proxy-headers \
+    --forwarded-allow-ips=%%FORWARDED_IPS%%
+
+Restart=on-failure
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=certmgr
+
+# Sicherheitshärtung
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ReadWritePaths=%%INSTALL_DIR%%/data
+
+[Install]
+WantedBy=multi-user.target

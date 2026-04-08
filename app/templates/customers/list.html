@@ -1,0 +1,181 @@
+{% extends "base.html" %}
+{% block title %}Kunden – SSL Cert Management{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <div>
+    <h4 class="fw-bold mb-0"><i class="bi bi-building me-2"></i>Kunden</h4>
+    <p class="text-muted small mb-0">
+      {{ customers | length }} Einträge
+      {% if show_archived %}<span class="badge bg-secondary ms-1">Archiv</span>{% endif %}
+    </p>
+  </div>
+  <a href="/customers/new" class="btn btn-success btn-sm">
+    <i class="bi bi-plus-lg me-1"></i>Neuer Kunde
+  </a>
+</div>
+
+<!-- Suche + Filter -->
+<div class="card border-0 shadow-sm mb-3">
+  <div class="card-body py-2">
+    <form method="get" action="/customers" class="row g-2 align-items-center">
+      <div class="col-sm-6 col-md-5">
+        <div class="input-group input-group-sm">
+          <span class="input-group-text bg-white border-end-0">
+            <i class="bi bi-search text-muted"></i>
+          </span>
+          <input type="text" name="q" class="form-control border-start-0 ps-0"
+                 placeholder="Name, Ansprechpartner, E-Mail …" value="{{ q }}">
+          {% if q %}
+          <a href="/customers{% if show_archived %}?archived=1{% endif %}" class="btn btn-outline-secondary btn-sm">
+            <i class="bi bi-x"></i>
+          </a>
+          {% endif %}
+        </div>
+      </div>
+      <div class="col-auto">
+        <button type="submit" class="btn btn-primary btn-sm">Suchen</button>
+      </div>
+      <div class="col-auto ms-auto">
+        {% if show_archived %}
+          <a href="/customers{% if q %}?q={{ q }}{% endif %}" class="btn btn-sm btn-outline-secondary">
+            <i class="bi bi-eye-slash me-1"></i>Archiv ausblenden
+          </a>
+        {% else %}
+          <a href="/customers?archived=1{% if q %}&q={{ q }}{% endif %}" class="btn btn-sm btn-outline-secondary">
+            <i class="bi bi-archive me-1"></i>Archiv anzeigen
+            {% if archived_count > 0 %}
+              <span class="badge bg-secondary ms-1">{{ archived_count }}</span>
+            {% endif %}
+          </a>
+        {% endif %}
+      </div>
+      {% if show_archived %}<input type="hidden" name="archived" value="1">{% endif %}
+    </form>
+  </div>
+</div>
+
+<!-- Tabelle -->
+<div class="card border-0 shadow-sm">
+  <div class="card-body p-0">
+    {% if customers %}
+    <div class="table-responsive">
+      <table class="table table-hover align-middle mb-0">
+        <thead class="table-light">
+          <tr>
+            <th>Name</th>
+            <th>Ansprechpartner</th>
+            <th>E-Mail</th>
+            <th class="text-center">Domains</th>
+            <th class="text-center">Zertifikate</th>
+            <th class="text-center">Status</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for c in customers %}
+          <tr class="{% if c.is_archived %}text-muted{% endif %}">
+            <td>
+              <a href="/customers/{{ c.id }}"
+                 class="text-decoration-none fw-semibold {% if c.is_archived %}text-muted{% endif %}">
+                {{ c.name }}
+              </a>
+            </td>
+            <td>{{ c.contact_name or '–' }}</td>
+            <td>
+              {% if c.contact_email %}
+                <a href="mailto:{{ c.contact_email }}" class="text-decoration-none text-muted">
+                  {{ c.contact_email }}
+                </a>
+              {% else %}–{% endif %}
+            </td>
+            <td class="text-center">
+              <span class="badge bg-info text-dark">{{ c.domains | length }}</span>
+            </td>
+            <td class="text-center">
+              <span class="badge bg-success">{{ c.certificates | length }}</span>
+            </td>
+            <td class="text-center">
+              {% if c.is_archived %}
+                <span class="badge bg-secondary"><i class="bi bi-archive me-1"></i>Archiviert</span>
+              {% else %}
+                <span class="badge bg-success-subtle text-success-emphasis border border-success-subtle">Aktiv</span>
+              {% endif %}
+            </td>
+            <td class="text-end pe-3">
+              <a href="/customers/{{ c.id }}/edit" class="btn btn-sm btn-outline-secondary me-1" title="Bearbeiten">
+                <i class="bi bi-pencil"></i>
+              </a>
+              {% if c.is_archived %}
+                <form method="post" action="/customers/{{ c.id }}/unarchive" class="d-inline">
+                  <button type="submit" class="btn btn-sm btn-outline-success" title="Wiederherstellen">
+                    <i class="bi bi-arrow-counterclockwise"></i>
+                  </button>
+                </form>
+              {% else %}
+                <button type="button" class="btn btn-sm btn-outline-warning"
+                        title="Archivieren"
+                        data-bs-toggle="modal"
+                        data-bs-target="#archiveModal"
+                        data-customer-id="{{ c.id }}"
+                        data-customer-name="{{ c.name }}">
+                  <i class="bi bi-archive"></i>
+                </button>
+              {% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <div class="text-center py-5 text-muted">
+      <i class="bi bi-building fs-1 d-block mb-2 opacity-25"></i>
+      {% if q %}
+        Keine Kunden gefunden für „<strong>{{ q }}</strong>".
+        <div class="mt-2">
+          <a href="/customers" class="btn btn-sm btn-outline-secondary">Suche zurücksetzen</a>
+        </div>
+      {% else %}
+        Noch keine Kunden angelegt.
+        <div class="mt-2">
+          <a href="/customers/new" class="btn btn-success btn-sm">Ersten Kunden anlegen</a>
+        </div>
+      {% endif %}
+    </div>
+    {% endif %}
+  </div>
+</div>
+
+<!-- Archivieren-Modal -->
+<div class="modal fade" id="archiveModal" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header border-0 pb-0">
+        <h5 class="modal-title"><i class="bi bi-archive text-warning me-2"></i>Kunde archivieren</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        Soll <strong id="archiveCustomerName"></strong> wirklich archiviert werden?
+        <p class="text-muted small mt-2 mb-0">Domains und Zertifikate bleiben erhalten. Der Kunde kann jederzeit wiederhergestellt werden.</p>
+      </div>
+      <div class="modal-footer border-0 pt-0">
+        <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Abbrechen</button>
+        <form id="archiveForm" method="post" action="" class="d-inline">
+          <button type="submit" class="btn btn-warning btn-sm">
+            <i class="bi bi-archive me-1"></i>Archivieren
+          </button>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+document.getElementById('archiveModal').addEventListener('show.bs.modal', function(e) {
+  const btn = e.relatedTarget;
+  document.getElementById('archiveCustomerName').textContent = btn.dataset.customerName;
+  document.getElementById('archiveForm').action = '/customers/' + btn.dataset.customerId + '/archive';
+});
+</script>
+{% endblock %}

@@ -1,0 +1,87 @@
+{% extends "base.html" %}
+{% block title %}{{ 'Kunde bearbeiten' if customer else 'Neuer Kunde' }} – SSL Cert Management{% endblock %}
+
+{% block content %}
+
+<!-- Breadcrumb -->
+<nav aria-label="breadcrumb" class="mb-3">
+  <ol class="breadcrumb">
+    <li class="breadcrumb-item"><a href="/customers" class="text-decoration-none">Kunden</a></li>
+    {% if customer %}
+      <li class="breadcrumb-item">
+        <a href="/customers/{{ customer.id }}" class="text-decoration-none">{{ customer.name }}</a>
+      </li>
+      <li class="breadcrumb-item active">Bearbeiten</li>
+    {% else %}
+      <li class="breadcrumb-item active">Neuer Kunde</li>
+    {% endif %}
+  </ol>
+</nav>
+
+<div class="d-flex align-items-center mb-4">
+  <h4 class="fw-bold mb-0">
+    {% if customer %}
+      <i class="bi bi-pencil-square me-2"></i>Kunde bearbeiten
+    {% else %}
+      <i class="bi bi-building-add me-2"></i>Neuer Kunde
+    {% endif %}
+  </h4>
+</div>
+
+<div class="card border-0 shadow-sm" style="max-width:600px;">
+  <div class="card-body p-4">
+    {% if error %}
+    <div class="alert alert-danger py-2 small">
+      <i class="bi bi-exclamation-triangle-fill me-1"></i>{{ error }}
+    </div>
+    {% endif %}
+
+    <form method="post"
+          action="{{ '/customers/' + customer.id|string + '/edit' if customer else '/customers/new' }}"
+          novalidate>
+
+      <div class="mb-3">
+        <label class="form-label fw-semibold" for="name">
+          Name <span class="text-danger">*</span>
+        </label>
+        <input type="text" id="name" name="name" class="form-control {% if error %}is-invalid{% endif %}"
+               value="{{ customer.name if customer else '' }}"
+               placeholder="Firmenname oder Kurzbezeichnung"
+               required autofocus>
+      </div>
+
+      <div class="row g-3 mb-3">
+        <div class="col-sm-6">
+          <label class="form-label fw-semibold" for="contact_name">Ansprechpartner</label>
+          <input type="text" id="contact_name" name="contact_name" class="form-control"
+                 value="{{ customer.contact_name or '' if customer else '' }}"
+                 placeholder="Max Mustermann">
+        </div>
+        <div class="col-sm-6">
+          <label class="form-label fw-semibold" for="contact_email">Kontakt-E-Mail</label>
+          <input type="email" id="contact_email" name="contact_email" class="form-control"
+                 value="{{ customer.contact_email or '' if customer else '' }}"
+                 placeholder="max@example.com">
+        </div>
+      </div>
+
+      <div class="mb-4">
+        <label class="form-label fw-semibold" for="notes">Notizen</label>
+        <textarea id="notes" name="notes" class="form-control" rows="3"
+                  placeholder="Interne Anmerkungen …">{{ customer.notes or '' if customer else '' }}</textarea>
+      </div>
+
+      <div class="d-flex gap-2">
+        <button type="submit" class="btn btn-success">
+          <i class="bi bi-check-lg me-1"></i>{{ 'Speichern' if customer else 'Anlegen' }}
+        </button>
+        {% if customer %}
+          <a href="/customers/{{ customer.id }}" class="btn btn-outline-secondary">Abbrechen</a>
+        {% else %}
+          <a href="/customers" class="btn btn-outline-secondary">Abbrechen</a>
+        {% endif %}
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}

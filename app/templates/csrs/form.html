@@ -1,0 +1,218 @@
+{% extends "base.html" %}
+{% block title %}Neuer CSR – SSL Cert Management{% endblock %}
+
+{% block content %}
+
+<nav aria-label="breadcrumb" class="mb-3">
+  <ol class="breadcrumb">
+    <li class="breadcrumb-item"><a href="/csrs" class="text-decoration-none">CSR-Verwaltung</a></li>
+    <li class="breadcrumb-item active">Neuer CSR</li>
+  </ol>
+</nav>
+
+<h4 class="fw-bold mb-4"><i class="bi bi-file-earmark-plus me-2"></i>Neuen CSR erstellen</h4>
+
+{% if error %}
+<div class="alert alert-danger py-2 mb-3">
+  <i class="bi bi-exclamation-triangle-fill me-1"></i>{{ error }}
+</div>
+{% endif %}
+
+<form method="post" action="/csrs/new" novalidate>
+<div class="row g-3">
+
+  <!-- Linke Spalte: Subject + Key -->
+  <div class="col-lg-7">
+
+    <!-- Zertifikats-Details -->
+    <div class="card border-0 shadow-sm mb-3">
+      <div class="card-header bg-white fw-semibold border-bottom">
+        <i class="bi bi-shield-check me-1 text-success"></i>Zertifikats-Details
+      </div>
+      <div class="card-body">
+
+        <div class="mb-3">
+          <label class="form-label fw-semibold" for="common_name">
+            Common Name (CN) <span class="text-danger">*</span>
+          </label>
+          <input type="text" id="common_name" name="common_name"
+                 class="form-control font-monospace {% if error and not form.common_name %}is-invalid{% endif %}"
+                 value="{{ form.common_name or '' }}"
+                 placeholder="example.com"
+                 required autofocus>
+          <div class="form-text">Primäre Domain oder Hostname des Zertifikats.</div>
+        </div>
+
+        <div class="mb-3">
+          <label class="form-label fw-semibold" for="sans">
+            Subject Alternative Names (SANs)
+          </label>
+          <input type="text" id="sans" name="sans"
+                 class="form-control font-monospace"
+                 value="{{ form.sans or '' }}"
+                 placeholder="www.example.com, mail.example.com, 192.168.1.1">
+          <div class="form-text">
+            Kommagetrennt. IP-Adressen werden automatisch als <code>iPAddress</code> eingetragen.
+            Der CN wird immer automatisch als SAN hinzugefügt.
+          </div>
+        </div>
+
+        <div class="mb-0">
+          <label class="form-label fw-semibold" for="email">E-Mail (Subject)</label>
+          <input type="email" id="email" name="email"
+                 class="form-control"
+                 value="{{ form.email or '' }}"
+                 placeholder="admin@example.com">
+        </div>
+
+      </div>
+    </div>
+
+    <!-- Subject-Information -->
+    <div class="card border-0 shadow-sm mb-3">
+      <div class="card-header bg-white fw-semibold border-bottom">
+        <i class="bi bi-building me-1 text-primary"></i>Subject-Information (Distinguished Name)
+      </div>
+      <div class="card-body">
+
+        <div class="row g-3">
+          <div class="col-sm-3">
+            <label class="form-label fw-semibold" for="country">Country (C)</label>
+            <input type="text" id="country" name="country"
+                   class="form-control text-uppercase"
+                   value="{{ form.country or '' }}"
+                   placeholder="DE"
+                   maxlength="2"
+                   style="letter-spacing:.1em;">
+            <div class="form-text">2 Zeichen, ISO 3166-1</div>
+          </div>
+          <div class="col-sm-9">
+            <label class="form-label fw-semibold" for="state">State / Province (ST)</label>
+            <input type="text" id="state" name="state"
+                   class="form-control"
+                   value="{{ form.state or '' }}"
+                   placeholder="Bayern">
+          </div>
+          <div class="col-sm-6">
+            <label class="form-label fw-semibold" for="locality">Locality / City (L)</label>
+            <input type="text" id="locality" name="locality"
+                   class="form-control"
+                   value="{{ form.locality or '' }}"
+                   placeholder="München">
+          </div>
+          <div class="col-sm-6">
+            <label class="form-label fw-semibold" for="organization">Organization (O)</label>
+            <input type="text" id="organization" name="organization"
+                   class="form-control"
+                   value="{{ form.organization or '' }}"
+                   placeholder="Musterfirma GmbH">
+          </div>
+          <div class="col-12">
+            <label class="form-label fw-semibold" for="ou">Organizational Unit (OU)</label>
+            <input type="text" id="ou" name="ou"
+                   class="form-control"
+                   value="{{ form.ou or '' }}"
+                   placeholder="IT-Abteilung">
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Rechte Spalte: Key + Zuordnung -->
+  <div class="col-lg-5">
+
+    <!-- Key-Einstellungen -->
+    <div class="card border-0 shadow-sm mb-3">
+      <div class="card-header bg-white fw-semibold border-bottom">
+        <i class="bi bi-key me-1 text-warning"></i>Private Key
+      </div>
+      <div class="card-body">
+        <label class="form-label fw-semibold">RSA Key-Länge</label>
+        {% for ks in key_sizes %}
+        <div class="form-check">
+          <input class="form-check-input" type="radio" name="key_size"
+                 id="key_size_{{ ks }}" value="{{ ks }}"
+                 {% if (form.key_size or 2048) | int == ks %}checked{% endif %}>
+          <label class="form-check-label" for="key_size_{{ ks }}">
+            <span class="fw-semibold">{{ ks }} Bit</span>
+            {% if ks == 2048 %}
+              <span class="text-muted small ms-1">– Standard, schnell</span>
+            {% elif ks == 3072 %}
+              <span class="text-muted small ms-1">– NIST-Empfehlung bis 2030</span>
+            {% elif ks == 4096 %}
+              <span class="text-muted small ms-1">– Maximal, langsamer</span>
+            {% endif %}
+          </label>
+        </div>
+        {% endfor %}
+        <div class="alert alert-warning py-2 mt-3 mb-0 small">
+          <i class="bi bi-lock-fill me-1"></i>
+          Der Private Key wird <strong>verschlüsselt</strong> in der Datenbank gespeichert
+          (<code>CSR_KEY_PASSPHRASE</code> aus der <code>.env</code>).
+        </div>
+      </div>
+    </div>
+
+    <!-- Zuordnung -->
+    <div class="card border-0 shadow-sm mb-3">
+      <div class="card-header bg-white fw-semibold border-bottom">
+        <i class="bi bi-link-45deg me-1 text-info"></i>Zuordnung (optional)
+      </div>
+      <div class="card-body">
+        <div class="mb-3">
+          <label class="form-label fw-semibold" for="customer_id">Kunde</label>
+          <select id="customer_id" name="customer_id" class="form-select">
+            <option value="">– Kein Kunde –</option>
+            {% for c in customers %}
+            <option value="{{ c.id }}"
+              {% if form.customer_id == c.id|string %}selected{% endif %}>
+              {{ c.name }}
+            </option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="mb-0">
+          <label class="form-label fw-semibold" for="domain_id">Domain</label>
+          <select id="domain_id" name="domain_id" class="form-select">
+            <option value="">– Keine Domain –</option>
+            {% for d in domains %}
+            <option value="{{ d.id }}"
+              {% if form.domain_id == d.id|string %}selected{% endif %}>
+              {{ d.fqdn }}
+              {% if d.customer %}({{ d.customer.name }}){% endif %}
+            </option>
+            {% endfor %}
+          </select>
+        </div>
+      </div>
+    </div>
+
+    <!-- Hinweis + Aktion -->
+    <div class="card border-0 shadow-sm border-success">
+      <div class="card-body">
+        <p class="small text-muted mb-3">
+          <i class="bi bi-info-circle me-1"></i>
+          Die Key-Generierung kann bei 4096 Bit einige Sekunden dauern.
+          Bitte nach dem Klick warten.
+        </p>
+        <button type="submit" class="btn btn-success w-100 fw-semibold">
+          <i class="bi bi-gear-fill me-1"></i>CSR &amp; Private Key generieren
+        </button>
+        <a href="/csrs" class="btn btn-outline-secondary w-100 mt-2">Abbrechen</a>
+      </div>
+    </div>
+
+  </div>
+</div>
+</form>
+
+<script>
+// Country-Feld automatisch uppercase
+document.getElementById('country').addEventListener('input', function() {
+  this.value = this.value.toUpperCase();
+});
+</script>
+{% endblock %}

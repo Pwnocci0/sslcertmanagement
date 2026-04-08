@@ -1,0 +1,114 @@
+{% extends "base.html" %}
+{% block title %}Bestellung {{ order.thessl_order_id or order.id }} – SSL Manager{% endblock %}
+
+{% block content %}
+<div class="d-flex align-items-center mb-4 gap-2">
+  <a href="/thesslstore" class="btn btn-sm btn-outline-secondary">
+    <i class="bi bi-arrow-left"></i>
+  </a>
+  <i class="bi bi-receipt fs-3 text-primary"></i>
+  <h1 class="h3 mb-0">Bestellung</h1>
+  <span class="badge bg-{{ order.status_badge_class }} fs-6">{{ order.status }}</span>
+</div>
+
+{% if flash %}
+<div class="alert alert-{{ flash.type }} alert-dismissible fade show" role="alert">
+  {{ flash.msg }}
+  <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+</div>
+{% endif %}
+
+<div class="row g-4">
+  <div class="col-md-6">
+    <div class="card shadow-sm h-100">
+      <div class="card-header fw-semibold">
+        <i class="bi bi-info-circle me-1"></i>Bestelldetails
+      </div>
+      <div class="card-body">
+        <dl class="row mb-0">
+          <dt class="col-sm-5">TheSSLStore Order-ID</dt>
+          <dd class="col-sm-7 font-monospace">{{ order.thessl_order_id or '–' }}</dd>
+          <dt class="col-sm-5">Vendor Order-ID</dt>
+          <dd class="col-sm-7 font-monospace">{{ order.vendor_order_id or '–' }}</dd>
+          <dt class="col-sm-5">SKU</dt>
+          <dd class="col-sm-7">{{ order.sku }}</dd>
+          <dt class="col-sm-5">Status</dt>
+          <dd class="col-sm-7">
+            <span class="badge bg-{{ order.status_badge_class }}">{{ order.status }}</span>
+          </dd>
+          <dt class="col-sm-5">Domain Control</dt>
+          <dd class="col-sm-7">{{ order.domain_control_method }}</dd>
+          <dt class="col-sm-5">Approver-E-Mail</dt>
+          <dd class="col-sm-7">{{ order.approver_email or '–' }}</dd>
+          <dt class="col-sm-5">Laufzeit</dt>
+          <dd class="col-sm-7">{{ order.validity_period }} Monate</dd>
+          <dt class="col-sm-5">Server-Lizenzen</dt>
+          <dd class="col-sm-7">{{ order.server_count }}</dd>
+          <dt class="col-sm-5">SANs</dt>
+          <dd class="col-sm-7">{{ order.san_count }}</dd>
+          <dt class="col-sm-5">Erstellt</dt>
+          <dd class="col-sm-7">{{ order.created_at.strftime('%d.%m.%Y %H:%M') }}</dd>
+          <dt class="col-sm-5">Aktualisiert</dt>
+          <dd class="col-sm-7">{{ order.updated_at.strftime('%d.%m.%Y %H:%M') }}</dd>
+        </dl>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-md-6">
+    <div class="card shadow-sm h-100">
+      <div class="card-header fw-semibold">
+        <i class="bi bi-patch-check me-1"></i>Verknüpftes Zertifikat
+      </div>
+      <div class="card-body">
+        {% if order.certificate %}
+        <dl class="row mb-0">
+          <dt class="col-sm-5">Common Name</dt>
+          <dd class="col-sm-7">
+            <a href="/certificates/{{ order.certificate.id }}">
+              {{ order.certificate.common_name }}
+            </a>
+          </dd>
+          <dt class="col-sm-5">Status</dt>
+          <dd class="col-sm-7">
+            <span class="badge bg-{{ order.certificate.status_badge_class }}">
+              {{ order.certificate.status }}
+            </span>
+          </dd>
+          {% if order.certificate.valid_until %}
+          <dt class="col-sm-5">Gültig bis</dt>
+          <dd class="col-sm-7">{{ order.certificate.valid_until.strftime('%d.%m.%Y') }}</dd>
+          {% endif %}
+        </dl>
+        {% else %}
+        <p class="text-muted mb-0">Kein Zertifikat verknüpft.</p>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  {% if order.raw_status_json %}
+  <div class="col-12">
+    <div class="card shadow-sm">
+      <div class="card-header fw-semibold">
+        <i class="bi bi-code-square me-1"></i>Letzter API-Status (JSON)
+      </div>
+      <div class="card-body">
+        <pre class="mb-0 small text-muted" style="max-height:300px;overflow:auto;">{{ order.raw_status_json }}</pre>
+      </div>
+    </div>
+  </div>
+  {% endif %}
+</div>
+
+<div class="mt-4 d-flex gap-2">
+  <form method="post" action="/thesslstore/orders/{{ order.id }}/refresh">
+    <button type="submit" class="btn btn-outline-primary">
+      <i class="bi bi-arrow-repeat me-1"></i>Status aktualisieren
+    </button>
+  </form>
+  <a href="/thesslstore" class="btn btn-outline-secondary">
+    <i class="bi bi-arrow-left me-1"></i>Zurück
+  </a>
+</div>
+{% endblock %}

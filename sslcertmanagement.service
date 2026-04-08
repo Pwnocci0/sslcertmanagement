@@ -1,0 +1,31 @@
+[Unit]
+Description=SSL Cert Management
+Documentation=https://github.com/yourorg/sslcertmanagement
+After=network.target
+
+[Service]
+Type=simple
+User=www-data
+Group=www-data
+WorkingDirectory=/opt/sslcertmanagement
+EnvironmentFile=/opt/sslcertmanagement/.env
+
+ExecStart=/opt/sslcertmanagement/.venv/bin/uvicorn app.main:app \
+    --host ${APP_HOST:-127.0.0.1} \
+    --port ${APP_PORT:-8000} \
+    --workers 1
+
+Restart=on-failure
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=sslcertmanagement
+
+# Sicherheitshärtung
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ReadWritePaths=/opt/sslcertmanagement/data
+
+[Install]
+WantedBy=multi-user.target

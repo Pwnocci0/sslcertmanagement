@@ -1,0 +1,96 @@
+{% extends "base.html" %}
+{% block title %}{{ 'Domain bearbeiten' if domain else 'Neue Domain' }} – SSL Cert Management{% endblock %}
+
+{% block content %}
+
+<!-- Breadcrumb -->
+<nav aria-label="breadcrumb" class="mb-3">
+  <ol class="breadcrumb">
+    <li class="breadcrumb-item"><a href="/domains" class="text-decoration-none">Domains</a></li>
+    {% if domain %}
+      <li class="breadcrumb-item">
+        <a href="/domains/{{ domain.id }}" class="text-decoration-none font-monospace">{{ domain.fqdn }}</a>
+      </li>
+      <li class="breadcrumb-item active">Bearbeiten</li>
+    {% else %}
+      <li class="breadcrumb-item active">Neue Domain</li>
+    {% endif %}
+  </ol>
+</nav>
+
+<div class="d-flex align-items-center mb-4">
+  <h4 class="fw-bold mb-0">
+    {% if domain %}
+      <i class="bi bi-pencil-square me-2"></i>Domain bearbeiten
+    {% else %}
+      <i class="bi bi-globe-americas me-2"></i>Neue Domain
+    {% endif %}
+  </h4>
+</div>
+
+<div class="card border-0 shadow-sm" style="max-width:560px;">
+  <div class="card-body p-4">
+    {% if error %}
+    <div class="alert alert-danger py-2 small">
+      <i class="bi bi-exclamation-triangle-fill me-1"></i>{{ error }}
+    </div>
+    {% endif %}
+
+    <form method="post"
+          action="{{ '/domains/' + domain.id|string + '/edit' if domain else '/domains/new' }}"
+          novalidate>
+
+      <div class="mb-3">
+        <label class="form-label fw-semibold" for="customer_id">
+          Kunde <span class="text-danger">*</span>
+        </label>
+        <select id="customer_id" name="customer_id" class="form-select" required>
+          <option value="">– Bitte wählen –</option>
+          {% for c in customers %}
+          <option value="{{ c.id }}"
+            {% if (domain and domain.customer_id == c.id) or (not domain and preselect_customer == c.id|string) %}
+              selected
+            {% endif %}>
+            {{ c.name }}
+          </option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div class="mb-3">
+        <label class="form-label fw-semibold" for="fqdn">
+          FQDN <span class="text-danger">*</span>
+        </label>
+        <div class="input-group">
+          <span class="input-group-text bg-white text-muted">
+            <i class="bi bi-globe2"></i>
+          </span>
+          <input type="text" id="fqdn" name="fqdn"
+                 class="form-control font-monospace {% if error %}is-invalid{% endif %}"
+                 value="{{ domain.fqdn if domain else '' }}"
+                 placeholder="example.com"
+                 required>
+        </div>
+        <div class="form-text">Vollqualifizierter Domainname, wird automatisch kleingeschrieben.</div>
+      </div>
+
+      <div class="mb-4">
+        <label class="form-label fw-semibold" for="notes">Notizen</label>
+        <textarea id="notes" name="notes" class="form-control" rows="2"
+                  placeholder="Interne Anmerkungen …">{{ domain.notes or '' if domain else '' }}</textarea>
+      </div>
+
+      <div class="d-flex gap-2">
+        <button type="submit" class="btn btn-success">
+          <i class="bi bi-check-lg me-1"></i>{{ 'Speichern' if domain else 'Anlegen' }}
+        </button>
+        {% if domain %}
+          <a href="/domains/{{ domain.id }}" class="btn btn-outline-secondary">Abbrechen</a>
+        {% else %}
+          <a href="/domains" class="btn btn-outline-secondary">Abbrechen</a>
+        {% endif %}
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}

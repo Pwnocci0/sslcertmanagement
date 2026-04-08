@@ -1,0 +1,94 @@
+{% extends "base.html" %}
+{% block title %}{% if tmpl %}Vorlage bearbeiten{% else %}Neue Vorlage{% endif %} – SSL Manager{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-md-7">
+    <div class="card shadow-sm">
+      <div class="card-header">
+        <i class="bi bi-file-earmark-text me-1"></i>
+        {% if tmpl %}Vorlage bearbeiten: {{ tmpl.name }}{% else %}Neue CSR-Vorlage{% endif %}
+      </div>
+      <div class="card-body">
+        {% if error %}
+        <div class="alert alert-danger py-2">{{ error }}</div>
+        {% endif %}
+
+        <form method="post">
+          <div class="mb-3">
+            <label class="form-label fw-semibold">Name <span class="text-danger">*</span></label>
+            <input type="text" name="name" class="form-control"
+                   value="{{ tmpl.name if tmpl else '' }}" required>
+          </div>
+
+          <div class="row g-2 mb-3">
+            <div class="col-2">
+              <label class="form-label">Land (2-Zeichen)</label>
+              <input type="text" name="country" class="form-control text-uppercase"
+                     maxlength="2" value="{{ tmpl.country if tmpl and tmpl.country else '' }}"
+                     placeholder="DE">
+            </div>
+            <div class="col-5">
+              <label class="form-label">Bundesland / State</label>
+              <input type="text" name="state" class="form-control"
+                     value="{{ tmpl.state if tmpl and tmpl.state else '' }}">
+            </div>
+            <div class="col-5">
+              <label class="form-label">Ort / Locality</label>
+              <input type="text" name="locality" class="form-control"
+                     value="{{ tmpl.locality if tmpl and tmpl.locality else '' }}">
+            </div>
+          </div>
+
+          <div class="row g-2 mb-3">
+            <div class="col-6">
+              <label class="form-label">Organisation</label>
+              <input type="text" name="organization" class="form-control"
+                     value="{{ tmpl.organization if tmpl and tmpl.organization else '' }}">
+            </div>
+            <div class="col-6">
+              <label class="form-label">Abteilung (OU)</label>
+              <input type="text" name="organizational_unit" class="form-control"
+                     value="{{ tmpl.organizational_unit if tmpl and tmpl.organizational_unit else '' }}">
+            </div>
+          </div>
+
+          <div class="mb-3">
+            <label class="form-label">Key-Größe (Bit)</label>
+            <select name="key_size" class="form-select">
+              {% for size in [2048, 3072, 4096] %}
+              <option value="{{ size }}" {% if tmpl and tmpl.key_size == size %}selected{% elif not tmpl and size == 2048 %}selected{% endif %}>
+                {{ size }} Bit
+              </option>
+              {% endfor %}
+            </select>
+          </div>
+
+          <div class="mb-3">
+            <label class="form-label">SAN-Muster <span class="text-muted">(optional)</span></label>
+            <input type="text" name="san_pattern" class="form-control font-monospace"
+                   value="{{ tmpl.san_pattern if tmpl and tmpl.san_pattern else '' }}"
+                   placeholder="z.B. *.{cn},{cn}">
+            <div class="form-text">Platzhalter <code>{cn}</code> wird durch den eingegebenen Common Name ersetzt.</div>
+          </div>
+
+          <div class="mb-4">
+            <div class="form-check">
+              <input class="form-check-input" type="checkbox" name="is_default" id="isDefault"
+                     value="on" {% if tmpl and tmpl.is_default %}checked{% endif %}>
+              <label class="form-check-label" for="isDefault">Als Standard-Vorlage setzen</label>
+            </div>
+          </div>
+
+          <div class="d-flex gap-2">
+            <button type="submit" class="btn btn-primary">
+              <i class="bi bi-save me-1"></i>Speichern
+            </button>
+            <a href="/csrtemplates" class="btn btn-outline-secondary">Abbrechen</a>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
