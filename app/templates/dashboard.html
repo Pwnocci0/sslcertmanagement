@@ -138,25 +138,25 @@
 
   <div class="col-lg-7">
     <div class="card border-0 shadow-sm h-100">
-      <div class="card-header bg-white fw-semibold border-bottom">
+      <div class="card-header fw-semibold border-bottom">
         <i class="bi bi-clock-history text-warning me-1"></i>Ablauf-Schwellen
       </div>
-      <div class="card-body">
-        <div class="row g-3">
+      <div class="card-body d-flex align-items-center">
+        <div class="row g-3 w-100">
           <div class="col-4 text-center">
             <div class="fs-1 fw-bold text-danger">{{ stats.exp_14 }}</div>
-            <div class="small text-muted">&lt; 14 Tage</div>
-            <a href="/?days=14" class="btn btn-sm btn-outline-danger mt-2">Anzeigen</a>
+            <div class="text-muted">in &lt; 14 Tagen</div>
+            <a href="/?days=14" class="btn btn-sm btn-outline-danger mt-3">Anzeigen</a>
           </div>
           <div class="col-4 text-center">
             <div class="fs-1 fw-bold text-warning">{{ stats.exp_30 }}</div>
-            <div class="small text-muted">&lt; 30 Tage</div>
-            <a href="/?days=30" class="btn btn-sm btn-outline-warning mt-2">Anzeigen</a>
+            <div class="text-muted">in &lt; 30 Tagen</div>
+            <a href="/?days=30" class="btn btn-sm btn-outline-warning mt-3">Anzeigen</a>
           </div>
           <div class="col-4 text-center">
             <div class="fs-1 fw-bold exp-60-text">{{ stats.exp_60 }}</div>
-            <div class="small text-muted">&lt; 60 Tage</div>
-            <a href="/?days=60" class="btn btn-sm btn-exp-60 mt-2">Anzeigen</a>
+            <div class="text-muted">in &lt; 60 Tagen</div>
+            <a href="/?days=60" class="btn btn-sm btn-exp-60 mt-3">Anzeigen</a>
           </div>
         </div>
       </div>

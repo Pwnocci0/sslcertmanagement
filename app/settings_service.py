@@ -59,6 +59,7 @@ CATEGORY_LABELS = {
     "certificates": "Zertifikate",
     "thesslstore":  "TheSSLStore API",
     "smtp":         "E-Mail / SMTP",
+    "maintenance":  "Wartung",
 }
 
 DEFINITIONS: dict[str, SettingDef] = {
@@ -288,6 +289,17 @@ DEFINITIONS: dict[str, SettingDef] = {
         value_type="string", category="smtp", is_sensitive=False,
         label="Reply-To (optional)",
         description="",
+    ),
+
+    # ── Logs & Wartung ────────────────────────────────────────────────────────
+    "logs.retention_days": SettingDef(
+        default="365",
+        value_type="int", category="maintenance", is_sensitive=False,
+        label="Log-Aufbewahrungsdauer (Tage)",
+        description=(
+            "Audit-Log-Einträge älter als dieser Wert werden täglich automatisch gelöscht. "
+            "Minimum: 1, Maximum: 3650."
+        ),
     ),
 }
 

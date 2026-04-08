@@ -14,6 +14,30 @@ logger = logging.getLogger(__name__)
 _scheduler: BackgroundScheduler | None = None
 
 
+def _run_log_cleanup() -> None:
+    """Löscht Audit-Log-Einträge gemäß konfigurierter Retention-Dauer."""
+    logger.info("Log-Cleanup gestartet.")
+    try:
+        from .database import SessionLocal
+        from .services.system_status import run_log_cleanup
+        from .settings_service import get_settings_service
+
+        db = SessionLocal()
+        try:
+            svc = get_settings_service(db)
+            retention_days = svc.get_int("logs.retention_days", default=365)
+            retention_days = max(1, min(3650, retention_days))
+            deleted = run_log_cleanup(db, retention_days)
+            if deleted:
+                logger.info("Log-Cleanup: %d Audit-Log-Einträge gelöscht (Retention: %d Tage).", deleted, retention_days)
+            else:
+                logger.debug("Log-Cleanup: keine fälligen Einträge.")
+        finally:
+            db.close()
+    except Exception:
+        logger.exception("Unerwarteter Fehler beim Log-Cleanup.")
+
+
 def _run_daily_backup() -> None:
     """Erstellt täglich um Mitternacht UTC ein globales Backup."""
     logger.info("Automatisches tägliches Backup gestartet.")
@@ -83,8 +107,22 @@ def start_scheduler() -> None:
         replace_existing=True,
         misfire_grace_time=3600,
     )
+    _scheduler.add_job(
+        _run_log_cleanup,
+        trigger="cron",
+        hour=1,
+        minute=0,
+        id="log_cleanup",
+        replace_existing=True,
+        misfire_grace_time=3600,
+    )
     _scheduler.start()
-    logger.info("Scheduler gestartet (stündlicher Notification-Check, tägliches Backup um 00:05 UTC).")
+    logger.info(
+        "Scheduler gestartet ("
+        "stündlicher Notification-Check, "
+        "tägliches Backup 00:05 UTC, "
+        "täglicher Log-Cleanup 01:00 UTC)."
+    )
 
 
 def shutdown_scheduler() -> None:

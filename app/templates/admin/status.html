@@ -6,7 +6,18 @@
   {% include "settings/_sidebar.html" %}
   <div class="col-lg-10 col-md-9">
 
-<h4 class="mb-4"><i class="bi bi-tools me-2"></i>System-Status & Administration</h4>
+<h4 class="mb-3"><i class="bi bi-tools me-2"></i>System-Status &amp; Administration</h4>
+
+{% if flash %}
+<div class="alert alert-{{ flash.type }} alert-dismissible fade show" role="alert">
+  {% if flash.type == 'success' %}<i class="bi bi-check-circle-fill me-2"></i>
+  {% elif flash.type == 'warning' %}<i class="bi bi-exclamation-triangle-fill me-2"></i>
+  {% elif flash.type == 'danger' %}<i class="bi bi-x-circle-fill me-2"></i>
+  {% else %}<i class="bi bi-info-circle-fill me-2"></i>{% endif %}
+  {{ flash.msg }}
+  <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+</div>
+{% endif %}
 
 {% if status.config_warnings %}
 <div class="alert alert-danger">
@@ -19,125 +30,378 @@
 </div>
 {% endif %}
 
-{% if status.sandbox_mode %}
-<div class="alert alert-warning">
+{% if status.thesslstore_enabled and status.sandbox_mode %}
+<div class="alert alert-warning py-2">
   <i class="bi bi-cone-striped me-1"></i>
   <strong>Sandbox-Modus aktiv</strong> – TheSSLStore-Bestellungen werden nicht live verarbeitet.
 </div>
 {% endif %}
 
+<!-- Zertifikat-Übersicht -->
 <div class="row g-3 mb-4">
-  <div class="col-md-3">
-    <div class="card text-center h-100">
-      <div class="card-body">
-        <div class="fs-2 fw-bold text-primary">{{ status.total_certs }}</div>
-        <div class="text-muted small">Zertifikate gesamt</div>
+  <div class="col-6 col-md-3">
+    <div class="card h-100 border-0 shadow-sm">
+      <div class="card-body d-flex align-items-center gap-3">
+        <div class="kpi-icon bg-primary bg-opacity-10 text-primary"><i class="bi bi-patch-check"></i></div>
+        <div>
+          <div class="fs-2 fw-bold">{{ status.total_certs }}</div>
+          <div class="text-muted">Zertifikate</div>
+        </div>
       </div>
     </div>
   </div>
-  <div class="col-md-3">
-    <div class="card text-center h-100">
-      <div class="card-body">
-        <div class="fs-2 fw-bold text-success">{{ status.active_certs }}</div>
-        <div class="text-muted small">Aktive Zertifikate</div>
+  <div class="col-6 col-md-3">
+    <div class="card h-100 border-0 shadow-sm">
+      <div class="card-body d-flex align-items-center gap-3">
+        <div class="kpi-icon bg-success bg-opacity-10 text-success"><i class="bi bi-check-circle"></i></div>
+        <div>
+          <div class="fs-2 fw-bold text-success">{{ status.active_certs }}</div>
+          <div class="text-muted">Aktiv</div>
+        </div>
       </div>
     </div>
   </div>
-  <div class="col-md-3">
-    <div class="card text-center h-100">
-      <div class="card-body">
-        <div class="fs-2 fw-bold {% if status.expiring_30 > 0 %}text-warning{% else %}text-muted{% endif %}">{{ status.expiring_30 }}</div>
-        <div class="text-muted small">Laufen in 30 Tagen ab</div>
+  <div class="col-6 col-md-3">
+    <div class="card h-100 border-0 shadow-sm">
+      <div class="card-body d-flex align-items-center gap-3">
+        <div class="kpi-icon {% if status.expiring_30 > 0 %}bg-warning bg-opacity-10 text-warning{% else %}bg-secondary bg-opacity-10 text-secondary{% endif %}">
+          <i class="bi bi-clock"></i>
+        </div>
+        <div>
+          <div class="fs-2 fw-bold {% if status.expiring_30 > 0 %}text-warning{% else %}text-muted{% endif %}">{{ status.expiring_30 }}</div>
+          <div class="text-muted">Ablauf &lt; 30 Tage</div>
+        </div>
       </div>
     </div>
   </div>
-  <div class="col-md-3">
-    <div class="card text-center h-100">
-      <div class="card-body">
-        <div class="fs-2 fw-bold text-info">{{ status.csr_count }}</div>
-        <div class="text-muted small">CSRs im Vault</div>
+  <div class="col-6 col-md-3">
+    <div class="card h-100 border-0 shadow-sm">
+      <div class="card-body d-flex align-items-center gap-3">
+        <div class="kpi-icon bg-info bg-opacity-10 text-info"><i class="bi bi-file-earmark-code"></i></div>
+        <div>
+          <div class="fs-2 fw-bold text-info">{{ status.csr_count }}</div>
+          <div class="text-muted">CSRs</div>
+        </div>
       </div>
     </div>
   </div>
 </div>
 
 <div class="row g-3">
+
+  <!-- System -->
   <div class="col-md-6">
-    <div class="card h-100">
-      <div class="card-header"><i class="bi bi-cpu me-1"></i>Systeminfo</div>
-      <div class="card-body">
+    <div class="card border-0 shadow-sm h-100">
+      <div class="card-header bg-transparent fw-semibold">
+        <i class="bi bi-cpu me-1"></i>System
+      </div>
+      <div class="card-body p-0">
         <table class="table table-sm mb-0">
           <tbody>
-            <tr><th class="w-50">Applikations-Version</th><td>{{ status.app_version }}</td></tr>
-            <tr><th>Python-Version</th><td>{{ status.python_version }}</td></tr>
-            <tr><th>Plattform</th><td>{{ status.platform }}</td></tr>
-            <tr><th>Install-Verzeichnis</th><td class="font-monospace small">{{ status.install_dir }}</td></tr>
-            <tr><th>Datenbank-Pfad</th><td class="font-monospace small">{{ status.db_path }}</td></tr>
+            <tr><td class="text-muted w-50">Version</td><td>{{ status.app_version }}</td></tr>
+            <tr><td class="text-muted">Python</td><td>{{ status.python_version }}</td></tr>
+            <tr><td class="text-muted">Plattform</td><td>{{ status.platform }}</td></tr>
             <tr>
-              <th>Datenbankstatus</th>
+              <td class="text-muted">Datenbank</td>
               <td>
                 {% if status.db_status.ok %}
-                <span class="badge bg-success">{{ status.db_status.msg }}</span>
+                  <span class="badge bg-success-subtle text-success-emphasis border border-success-subtle">
+                    <i class="bi bi-check me-1"></i>OK
+                  </span>
                 {% else %}
-                <span class="badge bg-danger">{{ status.db_status.msg }}</span>
+                  <span class="badge bg-danger">Fehler</span>
+                {% endif %}
+              </td>
+            </tr>
+            <tr>
+              <td class="text-muted">Install-Modus</td>
+              <td class="small font-monospace">{{ status.install_mode }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- Datenbank -->
+  <div class="col-md-6">
+    <div class="card border-0 shadow-sm h-100">
+      <div class="card-header bg-transparent fw-semibold">
+        <i class="bi bi-database me-1"></i>Datenbank
+      </div>
+      <div class="card-body p-0">
+        {% set di = status.db_info %}
+        <table class="table table-sm mb-0">
+          <tbody>
+            <tr>
+              <td class="text-muted w-50">Dateigröße</td>
+              <td class="fw-semibold">{{ di.size_human }}</td>
+            </tr>
+            {% if di.table_count is not none %}
+            <tr><td class="text-muted">Tabellen</td><td>{{ di.table_count }}</td></tr>
+            {% endif %}
+            {% if di.last_modified %}
+            <tr>
+              <td class="text-muted">Zuletzt geändert</td>
+              <td class="small">{{ di.last_modified.strftime('%d.%m.%Y %H:%M') }}</td>
+            </tr>
+            {% endif %}
+            <tr>
+              <td class="text-muted">Pfad</td>
+              <td class="font-monospace small text-truncate" style="max-width:220px"
+                  title="{{ di.path }}">{{ di.path }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- Speicher -->
+  <div class="col-md-6">
+    <div class="card border-0 shadow-sm h-100">
+      <div class="card-header bg-transparent fw-semibold">
+        <i class="bi bi-hdd me-1"></i>Speicher
+      </div>
+      <div class="card-body p-0">
+        {% set s = status.storage %}
+        <table class="table table-sm mb-0">
+          <tbody>
+            <tr><td class="text-muted w-50">Datenbank</td><td>{{ s.db_human }}</td></tr>
+            <tr><td class="text-muted">Backups</td><td>{{ s.backup_human }}</td></tr>
+            <tr><td class="text-muted">Logs</td><td>{{ s.log_human }}</td></tr>
+            <tr><td class="text-muted">Sonstiges</td><td>{{ s.other_human }}</td></tr>
+            <tr class="table-light fw-semibold">
+              <td>Daten gesamt</td><td>{{ s.total_data_human }}</td>
+            </tr>
+            {% if s.free_bytes is not none %}
+            <tr>
+              <td class="text-muted">Freier Speicher</td>
+              <td>{{ s.free_human }}
+                {% if s.partition_bytes %}
+                <span class="text-muted small">/ {{ s.partition_human }}</span>
+                {% endif %}
+              </td>
+            </tr>
+            {% endif %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- Backups -->
+  <div class="col-md-6">
+    <div class="card border-0 shadow-sm h-100">
+      <div class="card-header bg-transparent fw-semibold d-flex align-items-center">
+        <span><i class="bi bi-archive me-1"></i>Backups</span>
+        <a href="/backups" class="btn btn-sm btn-outline-secondary ms-auto py-0">
+          <i class="bi bi-arrow-right me-1"></i>Alle
+        </a>
+      </div>
+      <div class="card-body p-0">
+        {% set b = status.backups %}
+        <table class="table table-sm mb-0">
+          <tbody>
+            <tr>
+              <td class="text-muted w-50">Backups gesamt</td>
+              <td>{{ b.total_count }}
+                <span class="text-muted small">(Global: {{ b.global_count }}, Gruppen: {{ b.group_count }})</span>
+              </td>
+            </tr>
+            <tr>
+              <td class="text-muted">Letztes globales Backup</td>
+              <td>
+                {% if b.last_global_ok %}
+                  <span class="badge bg-success-subtle text-success-emphasis border border-success-subtle">
+                    <i class="bi bi-check me-1"></i>OK
+                  </span>
+                  <span class="small text-muted ms-1">
+                    {{ b.last_global_ok.created_at.strftime('%d.%m.%Y %H:%M') }}
+                  </span>
+                {% else %}
+                  <span class="text-muted small">Noch kein Backup</span>
+                {% endif %}
+              </td>
+            </tr>
+            {% if b.last_global_fail %}
+            <tr>
+              <td class="text-muted">Letzter Fehler</td>
+              <td>
+                <span class="badge bg-danger">Fehler</span>
+                <span class="small text-muted ms-1">
+                  {{ b.last_global_fail.created_at.strftime('%d.%m.%Y %H:%M') }}
+                </span>
+              </td>
+            </tr>
+            {% endif %}
+            {% if b.last_group %}
+            <tr>
+              <td class="text-muted">Letztes Gruppenbackup</td>
+              <td class="small text-muted">
+                {{ b.last_group.created_at.strftime('%d.%m.%Y %H:%M') }}
+              </td>
+            </tr>
+            {% endif %}
+            <tr>
+              <td class="text-muted">Nächster geplanter Lauf</td>
+              <td class="small">{{ b.next_scheduled }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- Logs -->
+  <div class="col-md-6">
+    <div class="card border-0 shadow-sm h-100">
+      <div class="card-header bg-transparent fw-semibold d-flex align-items-center">
+        <span><i class="bi bi-journal-text me-1"></i>Logs</span>
+        <a href="/admin/logs" class="btn btn-sm btn-outline-secondary ms-auto py-0">
+          <i class="bi bi-arrow-right me-1"></i>Logs anzeigen
+        </a>
+      </div>
+      <div class="card-body p-0">
+        {% set l = status.log_info %}
+        <table class="table table-sm mb-0">
+          <tbody>
+            <tr>
+              <td class="text-muted w-50">Audit-Einträge</td>
+              <td>{{ l.audit_count }}</td>
+            </tr>
+            {% if l.oldest_audit %}
+            <tr>
+              <td class="text-muted">Ältester Eintrag</td>
+              <td class="small">{{ l.oldest_audit.strftime('%d.%m.%Y') }}</td>
+            </tr>
+            {% endif %}
+            <tr>
+              <td class="text-muted">Log-Datei</td>
+              <td>{{ l.log_file_human }}</td>
+            </tr>
+            <tr>
+              <td class="text-muted">Aufbewahrung</td>
+              <td>
+                {{ l.retention_days }} Tage
+                {% if l.entries_due_cleanup > 0 %}
+                  <span class="badge bg-warning text-dark ms-1">
+                    {{ l.entries_due_cleanup }} fällig
+                  </span>
                 {% endif %}
               </td>
             </tr>
           </tbody>
         </table>
+        <div class="px-3 pb-3 pt-1">
+          <form method="post" action="/admin/cleanup-logs"
+                onsubmit="return confirm('Log-Cleanup jetzt ausführen?\n\nEinträge älter als {{ status.retention_days }} Tage werden gelöscht.')">
+            <button type="submit" class="btn btn-sm btn-outline-warning">
+              <i class="bi bi-trash me-1"></i>Cleanup jetzt ausführen
+            </button>
+          </form>
+        </div>
       </div>
     </div>
   </div>
 
+  <!-- Log-Retention-Einstellung -->
   <div class="col-md-6">
-    <div class="card h-100">
-      <div class="card-header"><i class="bi bi-shop me-1"></i>TheSSLStore-Sync</div>
+    <div class="card border-0 shadow-sm h-100">
+      <div class="card-header bg-transparent fw-semibold">
+        <i class="bi bi-gear me-1"></i>Log-Aufbewahrung konfigurieren
+      </div>
       <div class="card-body">
+        <p class="text-muted small mb-3">
+          Audit-Log-Einträge älter als der angegebene Wert werden täglich automatisch gelöscht.
+          Der Cleanup läuft täglich um 01:00 UTC.
+        </p>
+        <form method="post" action="/admin/save-retention" class="row g-2 align-items-end">
+          <div class="col-8">
+            <label class="form-label small fw-semibold">Aufbewahrung (Tage)</label>
+            <input type="number" name="retention_days" class="form-control form-control-sm"
+                   value="{{ status.retention_days }}" min="1" max="3650" required>
+          </div>
+          <div class="col-4">
+            <button type="submit" class="btn btn-primary btn-sm w-100">
+              <i class="bi bi-floppy me-1"></i>Speichern
+            </button>
+          </div>
+        </form>
+        <div class="form-text">Min. 1 Tag, max. 3650 Tage (ca. 10 Jahre).</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- TheSSLStore (nur wenn aktiviert) -->
+  {% if status.thesslstore_enabled %}
+  <div class="col-md-6">
+    <div class="card border-0 shadow-sm h-100">
+      <div class="card-header bg-transparent fw-semibold">
+        <i class="bi bi-shop me-1"></i>TheSSLStore
+        {% if status.sandbox_mode %}
+          <span class="badge bg-warning text-dark ms-1">Sandbox</span>
+        {% else %}
+          <span class="badge bg-success ms-1">Live</span>
+        {% endif %}
+      </div>
+      <div class="card-body p-0">
         <table class="table table-sm mb-0">
           <tbody>
             <tr>
-              <th class="w-50">Letzter Produkt-Sync</th>
-              <td>{% if status.last_product_sync %}{{ status.last_product_sync.strftime('%d.%m.%Y %H:%M') }} UTC{% else %}<span class="text-muted">–</span>{% endif %}</td>
+              <td class="text-muted w-50">Letzter Produkt-Sync</td>
+              <td>
+                {% if status.last_product_sync %}
+                  {{ status.last_product_sync.strftime('%d.%m.%Y %H:%M') }} UTC
+                {% else %}<span class="text-muted">–</span>{% endif %}
+              </td>
             </tr>
             <tr>
-              <th>Letzter Order-Sync</th>
-              <td>{% if status.last_order_sync %}{{ status.last_order_sync.strftime('%d.%m.%Y %H:%M') }} UTC{% else %}<span class="text-muted">–</span>{% endif %}</td>
+              <td class="text-muted">Letzter Order-Sync</td>
+              <td>
+                {% if status.last_order_sync %}
+                  {{ status.last_order_sync.strftime('%d.%m.%Y %H:%M') }} UTC
+                {% else %}<span class="text-muted">–</span>{% endif %}
+              </td>
             </tr>
             <tr>
-              <th>Offene Bestellungen</th>
+              <td class="text-muted">Offene Bestellungen</td>
               <td>{{ status.open_orders }}</td>
-            </tr>
-            <tr>
-              <th>Modus</th>
-              <td>{% if status.sandbox_mode %}<span class="badge bg-warning text-dark">Sandbox</span>{% else %}<span class="badge bg-success">Live</span>{% endif %}</td>
             </tr>
           </tbody>
         </table>
       </div>
     </div>
   </div>
+  {% endif %}
 
+  <!-- Backup-Hinweise -->
   <div class="col-12">
-    <div class="card border-info">
-      <div class="card-header bg-info bg-opacity-10">
-        <i class="bi bi-floppy2 me-1"></i>Backup-Hinweise
+    <div class="card border-0 border-info shadow-sm">
+      <div class="card-header bg-info bg-opacity-10 fw-semibold">
+        <i class="bi bi-shield-check me-1"></i>Sicherungshinweise
       </div>
       <div class="card-body">
-        <p class="mb-2">Folgende Dateien/Verzeichnisse sollten regelmäßig gesichert werden:</p>
-        <ul class="mb-3">
-          <li><code class="font-monospace">{{ status.db_path }}</code> – SQLite-Datenbank (Zertifikate, CSRs, Einstellungen)</li>
-          <li><code class="font-monospace">{{ status.data_dir }}/</code> – Data-Verzeichnis (gesamtes Verzeichnis)</li>
-          <li><strong>.env-Datei</strong> – Enthält APP_SECRET_KEY, CSR_KEY_PASSPHRASE – separat und verschlüsselt sichern!</li>
+        <ul class="mb-2">
+          <li>
+            <code class="font-monospace small">{{ status.db_info.path }}</code> –
+            SQLite-Datenbank (Zertifikate, CSRs, Einstellungen)
+          </li>
+          <li>
+            <strong>.env-Datei</strong> – enthält APP_SECRET_KEY und CSR_KEY_PASSPHRASE.
+            Separat und verschlüsselt aufbewahren!
+          </li>
         </ul>
         <div class="alert alert-warning py-2 mb-0">
           <i class="bi bi-exclamation-triangle-fill me-1"></i>
-          <strong>Wichtig:</strong> Ohne <code>CSR_KEY_PASSPHRASE</code> sind alle verschlüsselten Private Keys im Vault nicht entschlüsselbar.
-          Diese Passphrase muss getrennt von der Datenbank sicher verwahrt werden.
+          <strong>Wichtig:</strong> Ohne <code>CSR_KEY_PASSPHRASE</code> sind alle
+          verschlüsselten Private Keys im Vault nicht entschlüsselbar.
         </div>
       </div>
     </div>
   </div>
-</div>
+
+</div><!-- row g-3 -->
 
   </div><!-- col -->
 </div><!-- row -->

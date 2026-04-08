@@ -17,7 +17,14 @@ from sqlalchemy.orm import Session
 from .. import audit, models
 from ..auth import hash_password, login_required, pop_flash, set_flash
 from ..database import get_db
-from ..settings_service import get_settings_service
+from ..services.system_status import (
+    get_backup_summary,
+    get_database_info,
+    get_log_summary,
+    get_storage_breakdown,
+    run_log_cleanup,
+)
+from ..settings_service import get_settings_service, is_integration_enabled
 
 # Pfad zur Log-Datei (identisch mit main.py)
 _LOG_FILE = Path(__file__).parent.parent.parent / "data" / "app.log"
@@ -66,35 +73,44 @@ def _db_status(db: Session) -> dict:
 
 
 def _collect_status(db: Session) -> dict:
+    from datetime import timedelta
+    import sqlalchemy
+
     now = datetime.utcnow()
 
-    # DB
+    # ── Basisinfos ────────────────────────────────────────────────────────────
     db_status = _db_status(db)
-
-    # Pfade
-    db_url = os.getenv("DATABASE_URL", "sqlite:///./data/sslcertmanagement.db")
-    db_path = db_url.replace("sqlite:///", "")
-    data_dir = os.path.abspath(os.path.dirname(db_path))
     cwd = os.path.abspath(".")
 
-    # Letzter Produkt-Sync
-    last_sync = db.query(
-        __import__("sqlalchemy").func.max(models.TheSSLStoreProduct.synced_at)
-    ).scalar()
+    # ── Settings ──────────────────────────────────────────────────────────────
+    svc = get_settings_service(db)
+    retention_days = max(1, min(3650, svc.get_int("logs.retention_days", default=365)))
 
-    # Letzter Order-Status-Sync
-    last_order_sync = db.query(
-        __import__("sqlalchemy").func.max(models.TheSSLStoreOrder.updated_at)
-    ).scalar()
+    # ── TheSSLStore (nur wenn aktiviert) ──────────────────────────────────────
+    thesslstore_enabled = is_integration_enabled("thesslstore", db)
+    sandbox = svc.get_bool("thesslstore.sandbox", default=True)
 
-    # Zertifikats-Statistiken
-    total_certs = db.query(models.Certificate).filter(models.Certificate.is_archived == False).count()
+    last_sync = last_order_sync = None
+    open_orders = 0
+    if thesslstore_enabled:
+        last_sync = db.query(
+            sqlalchemy.func.max(models.TheSSLStoreProduct.synced_at)
+        ).scalar()
+        last_order_sync = db.query(
+            sqlalchemy.func.max(models.TheSSLStoreOrder.updated_at)
+        ).scalar()
+        open_orders = db.query(models.TheSSLStoreOrder).filter(
+            models.TheSSLStoreOrder.status.in_(["pending", "processing"])
+        ).count()
+
+    # ── Zertifikats-Statistiken ───────────────────────────────────────────────
+    total_certs = db.query(models.Certificate).filter(
+        models.Certificate.is_archived == False
+    ).count()
     active_certs = db.query(models.Certificate).filter(
         models.Certificate.status == "active",
         models.Certificate.is_archived == False,
     ).count()
-
-    from datetime import timedelta
     expiring_30 = db.query(models.Certificate).filter(
         models.Certificate.valid_until != None,
         models.Certificate.valid_until <= now + timedelta(days=30),
@@ -102,49 +118,57 @@ def _collect_status(db: Session) -> dict:
         models.Certificate.is_archived == False,
     ).count()
 
-    open_orders = db.query(models.TheSSLStoreOrder).filter(
-        models.TheSSLStoreOrder.status.in_(["pending", "processing"])
-    ).count()
-
-    # CSR-Vault
     csr_count = db.query(models.CsrRequest).filter(
         models.CsrRequest.is_archived == False
     ).count()
 
-    # Konfigurationswarnungen
-    svc = get_settings_service(db)
-    sandbox = svc.get_bool("thesslstore.sandbox", default=True)
-    suffix = "sandbox" if sandbox else "live"
+    # ── Konfigurationswarnungen ───────────────────────────────────────────────
     warnings = []
-    if not svc.get_str(f"thesslstore.partner_code_{suffix}"):
-        warnings.append(f"TheSSLStore Partner Code ({suffix.capitalize()}) nicht konfiguriert.")
-    if not svc.get_str(f"thesslstore.auth_token_{suffix}"):
-        warnings.append(f"TheSSLStore Auth Token ({suffix.capitalize()}) nicht konfiguriert.")
+    if thesslstore_enabled:
+        suffix = "sandbox" if sandbox else "live"
+        if not svc.get_str(f"thesslstore.partner_code_{suffix}"):
+            warnings.append(f"TheSSLStore Partner Code ({suffix.capitalize()}) nicht konfiguriert.")
+        if not svc.get_str(f"thesslstore.auth_token_{suffix}"):
+            warnings.append(f"TheSSLStore Auth Token ({suffix.capitalize()}) nicht konfiguriert.")
     if not os.getenv("CSR_KEY_PASSPHRASE", "").strip():
         warnings.append("CSR_KEY_PASSPHRASE nicht gesetzt – Key-Vault nicht nutzbar!")
     secret = os.getenv("APP_SECRET_KEY", "")
     if not secret or "dev-secret" in secret or "CHANGE" in secret:
         warnings.append("APP_SECRET_KEY ist noch der Entwicklungs-Standardwert!")
 
+    # ── Neue Status-Abschnitte (caching-fähig) ────────────────────────────────
+    db_info   = get_database_info()
+    storage   = get_storage_breakdown()
+    backups   = get_backup_summary(db)
+    log_info  = get_log_summary(db, retention_days=retention_days)
+
     return {
-        "app_version":      APP_VERSION,
-        "python_version":   platform.python_version(),
-        "platform":         platform.system(),
-        "db_status":        db_status,
-        "db_path":          os.path.abspath(db_path),
-        "data_dir":         data_dir,
-        "install_dir":      cwd,
+        # System
+        "app_version":       APP_VERSION,
+        "python_version":    platform.python_version(),
+        "platform":          platform.system(),
+        "install_dir":       cwd,
+        "install_mode":      os.getenv("APP_INSTALL_MODE", "nicht gesetzt"),
+        "db_status":         db_status,
+        "config_warnings":   warnings,
+        "now":               now,
+        # Zertifikate
+        "total_certs":       total_certs,
+        "active_certs":      active_certs,
+        "expiring_30":       expiring_30,
+        "csr_count":         csr_count,
+        # TheSSLStore (bedingt)
+        "thesslstore_enabled": thesslstore_enabled,
+        "sandbox_mode":      sandbox,
         "last_product_sync": last_sync,
-        "last_order_sync":  last_order_sync,
-        "install_mode":     os.getenv("APP_INSTALL_MODE", "nicht gesetzt"),
-        "sandbox_mode":     sandbox,
-        "total_certs":      total_certs,
-        "active_certs":     active_certs,
-        "expiring_30":      expiring_30,
-        "open_orders":      open_orders,
-        "csr_count":        csr_count,
-        "config_warnings":  warnings,
-        "now":              now,
+        "last_order_sync":   last_order_sync,
+        "open_orders":       open_orders,
+        # Neue Abschnitte
+        "db_info":           db_info,
+        "storage":           storage,
+        "backups":           backups,
+        "log_info":          log_info,
+        "retention_days":    retention_days,
     }
 
 
@@ -165,6 +189,53 @@ async def admin_status(request: Request, db: Session = Depends(get_db)):
             "flash":   pop_flash(request),
         },
     )
+
+
+@router.post("/save-retention")
+async def save_retention(
+    request: Request,
+    db: Session = Depends(get_db),
+    retention_days: int = Form(...),
+):
+    """Speichert die Log-Aufbewahrungsdauer direkt von der Status-Seite."""
+    redirect, user = _require_admin(request, db)
+    if redirect:
+        return redirect
+
+    days = max(1, min(3650, retention_days))
+    svc = get_settings_service(db)
+    svc.set("logs.retention_days", str(days), user_id=user.id)
+    audit.log(
+        db, "admin.retention_updated", "system", user_id=user.id,
+        details={"retention_days": days},
+        ip=_ip(request),
+    )
+    set_flash(request, "success", f"Log-Aufbewahrung auf {days} Tage gesetzt.")
+    return RedirectResponse(url="/admin", status_code=302)
+
+
+@router.post("/cleanup-logs")
+async def trigger_log_cleanup(request: Request, db: Session = Depends(get_db)):
+    """Manueller Auslöser für den Log-Cleanup."""
+    redirect, user = _require_admin(request, db)
+    if redirect:
+        return redirect
+
+    svc = get_settings_service(db)
+    retention_days = max(1, min(3650, svc.get_int("logs.retention_days", default=365)))
+
+    try:
+        deleted = run_log_cleanup(db, retention_days)
+        audit.log(
+            db, "admin.log_cleanup", "system", user_id=user.id,
+            details={"deleted": deleted, "retention_days": retention_days},
+            ip=_ip(request),
+        )
+        set_flash(request, "success", f"Log-Cleanup abgeschlossen: {deleted} Einträge gelöscht.")
+    except Exception as exc:
+        set_flash(request, "danger", f"Log-Cleanup fehlgeschlagen: {exc}")
+
+    return RedirectResponse(url="/admin", status_code=302)
 
 
 # ── Log-Viewer ────────────────────────────────────────────────────────────────
