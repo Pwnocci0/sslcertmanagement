@@ -1,0 +1,75 @@
+{% set p = request.url.path %}
+<div class="col-lg-2 col-md-3 mb-4 mb-md-0">
+  <div class="list-group list-group-flush border rounded shadow-sm">
+    <div class="list-group-item list-group-item-light py-2 px-3 text-uppercase small fw-bold text-muted" style="font-size:.7rem;letter-spacing:.06em">
+      Einstellungen
+    </div>
+
+    <a href="/settings"
+       class="list-group-item list-group-item-action py-2 {% if p == '/settings' %}active{% endif %}">
+      <i class="bi bi-sliders me-2"></i>Allgemein &amp; Sicherheit
+    </a>
+
+    <div class="list-group-item list-group-item-light py-1 px-3 text-uppercase small fw-bold text-muted border-top" style="font-size:.7rem;letter-spacing:.06em">
+      Verwaltung
+    </div>
+
+    <a href="/admin/users"
+       class="list-group-item list-group-item-action py-2 {% if '/admin/users' in p %}active{% endif %}">
+      <i class="bi bi-people me-2"></i>Benutzer
+    </a>
+
+    <a href="/customer-groups"
+       class="list-group-item list-group-item-action py-2 {% if p.startswith('/customer-groups') %}active{% endif %}">
+      <i class="bi bi-collection me-2"></i>Kundengruppen
+    </a>
+
+    <div class="list-group-item list-group-item-light py-1 px-3 text-uppercase small fw-bold text-muted border-top" style="font-size:.7rem;letter-spacing:.06em">
+      Benachrichtigungen
+    </div>
+
+    <a href="/mail-settings"
+       class="list-group-item list-group-item-action py-2 {% if p == '/mail-settings' %}active{% endif %}">
+      <i class="bi bi-envelope-at me-2"></i>Mail / SMTP
+    </a>
+
+    <a href="/mailtemplates"
+       class="list-group-item list-group-item-action py-2 {% if p.startswith('/mailtemplates') %}active{% endif %}">
+      <i class="bi bi-file-text me-2"></i>Mailtemplates
+    </a>
+
+    <a href="/notifications"
+       class="list-group-item list-group-item-action py-2 {% if p == '/notifications' %}active{% endif %}">
+      <i class="bi bi-bell me-2"></i>Versandhistorie
+    </a>
+
+    <div class="list-group-item list-group-item-light py-1 px-3 text-uppercase small fw-bold text-muted border-top" style="font-size:.7rem;letter-spacing:.06em">
+      System
+    </div>
+
+    <a href="/settings/integrations"
+       class="list-group-item list-group-item-action py-2 {% if p == '/settings/integrations' %}active{% endif %}">
+      <i class="bi bi-plug me-2"></i>Integrationen
+    </a>
+
+    <a href="/csrtemplates"
+       class="list-group-item list-group-item-action py-2 {% if p.startswith('/csrtemplates') %}active{% endif %}">
+      <i class="bi bi-file-earmark-text me-2"></i>CSR-Vorlagen
+    </a>
+
+    <a href="/admin"
+       class="list-group-item list-group-item-action py-2 {% if p == '/admin' %}active{% endif %}">
+      <i class="bi bi-tools me-2"></i>System-Status
+    </a>
+
+    <a href="/admin/logs"
+       class="list-group-item list-group-item-action py-2 {% if p == '/admin/logs' %}active{% endif %}">
+      <i class="bi bi-journal-text me-2"></i>Anwendungslogs
+    </a>
+
+    <a href="/backups"
+       class="list-group-item list-group-item-action py-2 {% if p.startswith('/backups') %}active{% endif %}">
+      <i class="bi bi-archive me-2"></i>Backups
+    </a>
+  </div>
+</div>

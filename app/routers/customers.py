@@ -4,7 +4,10 @@ from fastapi.templating import Jinja2Templates
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
-from ..auth import login_required, set_flash, pop_flash
+from ..auth import (
+    check_customer_access, forbidden_response,
+    get_accessible_customer_ids, login_required, pop_flash, set_flash,
+)
 from ..database import get_db
 from .. import models
 
@@ -22,6 +25,12 @@ async def customer_list(request: Request, db: Session = Depends(get_db)):
     show_archived = request.query_params.get("archived", "0") == "1"
 
     query = db.query(models.Customer)
+
+    # Techniker sehen nur ihre Kundengruppen
+    accessible_ids = get_accessible_customer_ids(user, db)
+    if accessible_ids is not None:
+        query = query.filter(models.Customer.id.in_(accessible_ids))
+
     if not show_archived:
         query = query.filter(models.Customer.is_archived == False)
     if q:
@@ -34,7 +43,11 @@ async def customer_list(request: Request, db: Session = Depends(get_db)):
         )
     customers = query.order_by(models.Customer.name).all()
 
-    archived_count = db.query(models.Customer).filter(models.Customer.is_archived == True).count()
+    # Archivzähler: nur für accessible Kunden
+    archived_q = db.query(models.Customer).filter(models.Customer.is_archived == True)
+    if accessible_ids is not None:
+        archived_q = archived_q.filter(models.Customer.id.in_(accessible_ids))
+    archived_count = archived_q.count()
 
     return templates.TemplateResponse(
         "customers/list.html",
@@ -56,6 +69,9 @@ async def customer_new(request: Request, db: Session = Depends(get_db)):
     if isinstance(user, RedirectResponse):
         return user
 
+    if not user.is_admin:
+        return forbidden_response("Neue Kunden können nur von Administratoren angelegt werden.")
+
     return templates.TemplateResponse(
         "customers/form.html",
         {"request": request, "user": user, "customer": None, "error": None, "flash": pop_flash(request)},
@@ -74,6 +90,9 @@ async def customer_create(
     user = login_required(request, db)
     if isinstance(user, RedirectResponse):
         return user
+
+    if not user.is_admin:
+        return forbidden_response("Neue Kunden können nur von Administratoren angelegt werden.")
 
     name = name.strip()
     if not name:
@@ -106,6 +125,9 @@ async def customer_detail(customer_id: int, request: Request, db: Session = Depe
         set_flash(request, "warning", "Kunde nicht gefunden.")
         return RedirectResponse(url="/customers", status_code=302)
 
+    if not check_customer_access(user, customer_id, db):
+        return forbidden_response()
+
     return templates.TemplateResponse(
         "customers/detail.html",
         {"request": request, "user": user, "customer": customer, "flash": pop_flash(request)},
@@ -121,6 +143,9 @@ async def customer_edit(customer_id: int, request: Request, db: Session = Depend
     customer = db.query(models.Customer).filter(models.Customer.id == customer_id).first()
     if not customer:
         return RedirectResponse(url="/customers", status_code=302)
+
+    if not check_customer_access(user, customer_id, db):
+        return forbidden_response()
 
     return templates.TemplateResponse(
         "customers/form.html",
@@ -146,6 +171,9 @@ async def customer_update(
     if not customer:
         return RedirectResponse(url="/customers", status_code=302)
 
+    if not check_customer_access(user, customer_id, db):
+        return forbidden_response()
+
     name = name.strip()
     if not name:
         return templates.TemplateResponse(
@@ -169,6 +197,9 @@ async def customer_archive(customer_id: int, request: Request, db: Session = Dep
     if isinstance(user, RedirectResponse):
         return user
 
+    if not user.is_admin:
+        return forbidden_response("Nur Administratoren können Kunden archivieren.")
+
     customer = db.query(models.Customer).filter(models.Customer.id == customer_id).first()
     if customer:
         customer.is_archived = True
@@ -182,6 +213,9 @@ async def customer_unarchive(customer_id: int, request: Request, db: Session = D
     user = login_required(request, db)
     if isinstance(user, RedirectResponse):
         return user
+
+    if not user.is_admin:
+        return forbidden_response("Nur Administratoren können Kunden wiederherstellen.")
 
     customer = db.query(models.Customer).filter(models.Customer.id == customer_id).first()
     if customer:
@@ -203,12 +237,13 @@ async def customer_defaults_edit(customer_id: int, request: Request, db: Session
     if not customer:
         return RedirectResponse(url="/customers", status_code=302)
 
-    defaults = customer.defaults
+    if not check_customer_access(user, customer_id, db):
+        return forbidden_response()
 
     return templates.TemplateResponse(
         "customers/defaults_form.html",
         {"request": request, "user": user, "customer": customer,
-         "defaults": defaults, "flash": pop_flash(request)},
+         "defaults": customer.defaults, "flash": pop_flash(request)},
     )
 
 
@@ -234,6 +269,9 @@ async def customer_defaults_save(
     customer = db.query(models.Customer).filter(models.Customer.id == customer_id).first()
     if not customer:
         return RedirectResponse(url="/customers", status_code=302)
+
+    if not check_customer_access(user, customer_id, db):
+        return forbidden_response()
 
     defaults = customer.defaults
     if not defaults:

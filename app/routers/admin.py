@@ -1,4 +1,4 @@
-"""Admin-Wartungs- und Systemstatusseite."""
+"""Admin-Wartungs-, Systemstatus- und Benutzerverwaltungsseite."""
 from __future__ import annotations
 
 import collections
@@ -9,15 +9,15 @@ from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
-from fastapi import APIRouter, Depends, Query, Request
+from fastapi import APIRouter, Depends, Form, Query, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
 
-from ..auth import login_required, pop_flash
+from .. import audit, models
+from ..auth import hash_password, login_required, pop_flash, set_flash
 from ..database import get_db
 from ..settings_service import get_settings_service
-from .. import models
 
 # Pfad zur Log-Datei (identisch mit main.py)
 _LOG_FILE = Path(__file__).parent.parent.parent / "data" / "app.log"
@@ -51,6 +51,10 @@ def _require_admin(request, db):
     if not user.is_admin:
         return RedirectResponse(url="/", status_code=302), None
     return None, user
+
+
+def _ip(r: Request) -> str:
+    return r.headers.get("X-Forwarded-For", r.client.host if r.client else "unknown")
 
 
 def _db_status(db: Session) -> dict:
@@ -255,3 +259,284 @@ async def admin_logs(
             "log_file_path":   str(_LOG_FILE),
         },
     )
+
+
+# ── Benutzerverwaltung ────────────────────────────────────────────────────────
+
+@router.get("/users", response_class=HTMLResponse)
+async def user_list(request: Request, db: Session = Depends(get_db)):
+    redir, user = _require_admin(request, db)
+    if redir:
+        return redir
+
+    users = db.query(models.User).order_by(models.User.username).all()
+    return templates.TemplateResponse(
+        "admin/users/list.html",
+        {"request": request, "user": user, "users": users, "flash": pop_flash(request)},
+    )
+
+
+@router.get("/users/new", response_class=HTMLResponse)
+async def user_new(request: Request, db: Session = Depends(get_db)):
+    redir, user = _require_admin(request, db)
+    if redir:
+        return redir
+
+    groups = db.query(models.CustomerGroup).order_by(models.CustomerGroup.name).all()
+    return templates.TemplateResponse(
+        "admin/users/form.html",
+        {
+            "request": request, "user": user, "edit_user": None,
+            "groups": groups, "selected_group_ids": [],
+            "error": None, "flash": None,
+        },
+    )
+
+
+@router.post("/users/new")
+async def user_create(
+    request: Request,
+    username: str = Form(...),
+    email: str = Form(...),
+    password: str = Form(...),
+    role: str = Form("technician"),
+    group_ids: list[int] = Form(default=[]),
+    db: Session = Depends(get_db),
+):
+    redir, user = _require_admin(request, db)
+    if redir:
+        return redir
+
+    def render_error(msg: str, status: int = 422):
+        groups = db.query(models.CustomerGroup).order_by(models.CustomerGroup.name).all()
+        return templates.TemplateResponse(
+            "admin/users/form.html",
+            {
+                "request": request, "user": user, "edit_user": None,
+                "groups": groups, "selected_group_ids": group_ids,
+                "error": msg, "flash": None,
+            },
+            status_code=status,
+        )
+
+    username = username.strip()
+    email = email.strip()
+    if not username or not email or not password:
+        return render_error("Benutzername, E-Mail und Passwort sind Pflichtfelder.")
+    if role not in ("admin", "technician"):
+        return render_error("Ungültige Rolle.")
+    if len(password) < 8:
+        return render_error("Passwort muss mindestens 8 Zeichen lang sein.")
+
+    if db.query(models.User).filter(models.User.username == username).first():
+        return render_error(f'Benutzername "{username}" ist bereits vergeben.')
+    if db.query(models.User).filter(models.User.email == email).first():
+        return render_error(f'E-Mail "{email}" ist bereits vergeben.')
+
+    new_user = models.User(
+        username=username,
+        email=email,
+        hashed_password=hash_password(password),
+        is_active=True,
+        is_admin=(role == "admin"),
+        role=role,
+    )
+
+    # Kundengruppen zuweisen (nur für Techniker sinnvoll)
+    if group_ids and role == "technician":
+        new_user.customer_groups = db.query(models.CustomerGroup).filter(
+            models.CustomerGroup.id.in_(group_ids)
+        ).all()
+
+    db.add(new_user)
+    db.flush()
+
+    audit.log(db, "user.created", "user", user.id,
+              entity_id=new_user.id,
+              details={"username": username, "role": role, "group_ids": group_ids},
+              ip=_ip(request))
+
+    db.commit()
+    set_flash(request, "success", f'Benutzer "{username}" wurde angelegt.')
+    return RedirectResponse(url="/admin/users", status_code=302)
+
+
+@router.get("/users/{user_id}/edit", response_class=HTMLResponse)
+async def user_edit(user_id: int, request: Request, db: Session = Depends(get_db)):
+    redir, user = _require_admin(request, db)
+    if redir:
+        return redir
+
+    edit_user = db.query(models.User).filter(models.User.id == user_id).first()
+    if not edit_user:
+        set_flash(request, "warning", "Benutzer nicht gefunden.")
+        return RedirectResponse(url="/admin/users", status_code=302)
+
+    groups = db.query(models.CustomerGroup).order_by(models.CustomerGroup.name).all()
+    selected_group_ids = [g.id for g in edit_user.customer_groups]
+
+    return templates.TemplateResponse(
+        "admin/users/form.html",
+        {
+            "request": request, "user": user, "edit_user": edit_user,
+            "groups": groups, "selected_group_ids": selected_group_ids,
+            "error": None, "flash": None,
+        },
+    )
+
+
+@router.post("/users/{user_id}/edit")
+async def user_update(
+    user_id: int,
+    request: Request,
+    email: str = Form(...),
+    password: str = Form(""),
+    role: str = Form("technician"),
+    group_ids: list[int] = Form(default=[]),
+    db: Session = Depends(get_db),
+):
+    redir, user = _require_admin(request, db)
+    if redir:
+        return redir
+
+    edit_user = db.query(models.User).filter(models.User.id == user_id).first()
+    if not edit_user:
+        return RedirectResponse(url="/admin/users", status_code=302)
+
+    def render_error(msg: str, status: int = 422):
+        groups = db.query(models.CustomerGroup).order_by(models.CustomerGroup.name).all()
+        return templates.TemplateResponse(
+            "admin/users/form.html",
+            {
+                "request": request, "user": user, "edit_user": edit_user,
+                "groups": groups, "selected_group_ids": group_ids,
+                "error": msg, "flash": None,
+            },
+            status_code=status,
+        )
+
+    email = email.strip()
+    if not email:
+        return render_error("E-Mail darf nicht leer sein.")
+    if role not in ("admin", "technician"):
+        return render_error("Ungültige Rolle.")
+    if password and len(password) < 8:
+        return render_error("Neues Passwort muss mindestens 8 Zeichen lang sein.")
+
+    # E-Mail-Duplikat prüfen (eigene E-Mail ausschließen)
+    existing = db.query(models.User).filter(
+        models.User.email == email,
+        models.User.id != user_id,
+    ).first()
+    if existing:
+        return render_error(f'E-Mail "{email}" ist bereits vergeben.')
+
+    # Letzten Admin schützen: Falls dieser User der letzte Admin ist, Rolle nicht ändern
+    if edit_user.is_admin and role == "technician":
+        admin_count = db.query(models.User).filter(
+            models.User.is_admin == True,
+            models.User.id != user_id,
+        ).count()
+        if admin_count == 0:
+            return render_error("Der letzte Administrator kann nicht zum Techniker werden.")
+
+    old_role = edit_user.role
+    edit_user.email = email
+    edit_user.role = role
+    edit_user.is_admin = (role == "admin")
+    if password:
+        edit_user.hashed_password = hash_password(password)
+
+    # Kundengruppen aktualisieren
+    if group_ids and role == "technician":
+        edit_user.customer_groups = db.query(models.CustomerGroup).filter(
+            models.CustomerGroup.id.in_(group_ids)
+        ).all()
+    else:
+        edit_user.customer_groups = []
+
+    audit.log(db, "user.updated", "user", user.id,
+              entity_id=user_id,
+              details={
+                  "username": edit_user.username,
+                  "old_role": old_role, "new_role": role,
+                  "password_changed": bool(password),
+                  "group_ids": group_ids,
+              },
+              ip=_ip(request))
+
+    db.commit()
+    set_flash(request, "success", f'Benutzer "{edit_user.username}" gespeichert.')
+    return RedirectResponse(url="/admin/users", status_code=302)
+
+
+@router.post("/users/{user_id}/reset-mfa")
+async def user_reset_mfa(user_id: int, request: Request, db: Session = Depends(get_db)):
+    redir, user = _require_admin(request, db)
+    if redir:
+        return redir
+
+    edit_user = db.query(models.User).filter(models.User.id == user_id).first()
+    if not edit_user:
+        set_flash(request, "warning", "Benutzer nicht gefunden.")
+        return RedirectResponse(url="/admin/users", status_code=302)
+
+    if edit_user.id == user.id:
+        set_flash(request, "warning", "Sie können Ihre eigene MFA nicht zurücksetzen.")
+        return RedirectResponse(url="/admin/users", status_code=302)
+
+    edit_user.mfa_secret_encrypted = None
+    edit_user.mfa_setup_completed = False
+    edit_user.recovery_codes_json = None
+    edit_user.last_mfa_at = None
+
+    audit.log(db, "user.mfa_reset", "user", user.id,
+              entity_id=user_id,
+              details={"username": edit_user.username, "reset_by": user.username},
+              ip=_ip(request))
+
+    db.commit()
+    set_flash(request, "success",
+              f'MFA für Benutzer "{edit_user.username}" wurde zurückgesetzt. '
+              f'Der Benutzer muss sich beim nächsten Login neu registrieren.')
+    return RedirectResponse(url="/admin/users", status_code=302)
+
+
+@router.post("/users/{user_id}/toggle-active")
+async def user_toggle_active(user_id: int, request: Request, db: Session = Depends(get_db)):
+    redir, user = _require_admin(request, db)
+    if redir:
+        return redir
+
+    edit_user = db.query(models.User).filter(models.User.id == user_id).first()
+    if not edit_user:
+        return RedirectResponse(url="/admin/users", status_code=302)
+
+    # Eigenes Konto nicht deaktivieren
+    if edit_user.id == user.id:
+        set_flash(request, "warning", "Sie können Ihr eigenes Konto nicht deaktivieren.")
+        return RedirectResponse(url="/admin/users", status_code=302)
+
+    # Letzten Admin schützen
+    if edit_user.is_admin and edit_user.is_active:
+        admin_count = db.query(models.User).filter(
+            models.User.is_admin == True,
+            models.User.is_active == True,
+            models.User.id != user_id,
+        ).count()
+        if admin_count == 0:
+            set_flash(request, "danger", "Der letzte aktive Administrator kann nicht deaktiviert werden.")
+            return RedirectResponse(url="/admin/users", status_code=302)
+
+    edit_user.is_active = not edit_user.is_active
+    action = "aktiviert" if edit_user.is_active else "deaktiviert"
+
+    audit.log(db, "user.toggled_active", "user", user.id,
+              entity_id=user_id,
+              details={"username": edit_user.username, "is_active": edit_user.is_active},
+              ip=_ip(request))
+
+    db.commit()
+    set_flash(request, "success" if edit_user.is_active else "warning",
+              f'Benutzer "{edit_user.username}" wurde {action}.')
+    return RedirectResponse(url="/admin/users", status_code=302)

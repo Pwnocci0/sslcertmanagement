@@ -1,0 +1,192 @@
+{% extends "base.html" %}
+{% block title %}Kundengruppe: {{ group.name }} – SSL Manager{% endblock %}
+
+{% block content %}
+<div class="d-flex align-items-center mb-3">
+  <i class="bi bi-collection fs-3 text-secondary me-2"></i>
+  <div>
+    <h1 class="h3 mb-0">{{ group.name }}</h1>
+    {% if group.description %}
+    <p class="text-muted small mb-0">{{ group.description }}</p>
+    {% endif %}
+  </div>
+  <div class="ms-auto d-flex gap-2">
+    <a href="/customer-groups/{{ group.id }}/edit" class="btn btn-sm btn-outline-secondary">
+      <i class="bi bi-pencil me-1"></i>Bearbeiten
+    </a>
+    <a href="/customer-groups" class="btn btn-sm btn-outline-secondary">
+      <i class="bi bi-arrow-left me-1"></i>Zurück
+    </a>
+  </div>
+</div>
+
+{% if flash %}
+<div class="alert alert-{{ flash.type }} alert-dismissible fade show" role="alert">
+  {% if flash.type == 'success' %}<i class="bi bi-check-circle-fill me-2"></i>
+  {% elif flash.type == 'warning' %}<i class="bi bi-exclamation-triangle-fill me-2"></i>
+  {% elif flash.type == 'danger' %}<i class="bi bi-x-circle-fill me-2"></i>
+  {% else %}<i class="bi bi-info-circle-fill me-2"></i>{% endif %}
+  {{ flash.msg }}
+  <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+</div>
+{% endif %}
+
+<div class="row g-3">
+  <!-- Kunden -->
+  <div class="col-md-6">
+    <div class="card border-0 shadow-sm h-100">
+      <div class="card-header bg-transparent">
+        <i class="bi bi-building me-1"></i>
+        Kunden
+        <span class="badge bg-info-subtle text-info-emphasis border border-info-subtle ms-1">
+          {{ group.customers | length }}
+        </span>
+      </div>
+      <div class="card-body p-0">
+        {% if group.customers %}
+        <ul class="list-group list-group-flush">
+          {% for c in group.customers %}
+          <li class="list-group-item d-flex justify-content-between align-items-center">
+            <a href="/customers/{{ c.id }}" class="text-decoration-none">{{ c.name }}</a>
+            {% if c.is_archived %}
+            <span class="badge bg-secondary">Archiviert</span>
+            {% endif %}
+          </li>
+          {% endfor %}
+        </ul>
+        {% else %}
+        <div class="text-center py-4 text-muted small">
+          <i class="bi bi-building opacity-25 d-block fs-3 mb-1"></i>
+          Keine Kunden zugeordnet
+        </div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  <!-- Techniker -->
+  <div class="col-md-6">
+    <div class="card border-0 shadow-sm h-100">
+      <div class="card-header bg-transparent">
+        <i class="bi bi-person-gear me-1"></i>
+        Techniker
+        <span class="badge bg-secondary-subtle text-secondary-emphasis border border-secondary-subtle ms-1">
+          {{ group.users | length }}
+        </span>
+      </div>
+      <div class="card-body p-0">
+        {% if group.users %}
+        <ul class="list-group list-group-flush">
+          {% for u in group.users %}
+          <li class="list-group-item d-flex justify-content-between align-items-center">
+            <div>
+              <span class="fw-semibold">{{ u.username }}</span>
+              <span class="text-muted small ms-2">{{ u.email }}</span>
+            </div>
+            <div>
+              {% if u.is_active %}
+                <span class="badge bg-success-subtle text-success-emphasis border border-success-subtle">Aktiv</span>
+              {% else %}
+                <span class="badge bg-secondary">Inaktiv</span>
+              {% endif %}
+              {% if u.mfa_secret_encrypted %}
+                <i class="bi bi-shield-check text-success ms-1" title="MFA eingerichtet"></i>
+              {% endif %}
+            </div>
+          </li>
+          {% endfor %}
+        </ul>
+        {% else %}
+        <div class="text-center py-4 text-muted small">
+          <i class="bi bi-person-gear opacity-25 d-block fs-3 mb-1"></i>
+          Keine Techniker zugeordnet
+        </div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Backups -->
+{% if user.is_admin %}
+<div class="card border-0 shadow-sm mt-4">
+  <div class="card-header bg-transparent d-flex align-items-center">
+    <i class="bi bi-archive me-1"></i>Backups
+    {% if recent_backups %}
+    <span class="badge bg-secondary-subtle text-secondary-emphasis border border-secondary-subtle ms-1">
+      {{ recent_backups | length }}
+    </span>
+    {% endif %}
+    <div class="ms-auto d-flex gap-2">
+      <a href="/backups/group/{{ group.id }}" class="btn btn-sm btn-outline-secondary">
+        <i class="bi bi-list me-1"></i>Alle anzeigen
+      </a>
+      <form method="post" action="/backups/group/{{ group.id }}/create" class="d-inline">
+        <button type="submit" class="btn btn-sm btn-success">
+          <i class="bi bi-plus-lg me-1"></i>Backup erstellen
+        </button>
+      </form>
+    </div>
+  </div>
+  <div class="card-body p-0">
+    {% if recent_backups %}
+    <ul class="list-group list-group-flush">
+      {% for b in recent_backups %}
+      <li class="list-group-item d-flex align-items-center gap-2 py-2">
+        {% if b.status == 'completed' %}
+          <i class="bi bi-check-circle-fill text-success"></i>
+        {% elif b.status == 'failed' %}
+          <i class="bi bi-x-circle-fill text-danger"></i>
+        {% else %}
+          <i class="bi bi-hourglass-split text-secondary"></i>
+        {% endif %}
+        <span class="small fw-semibold">{{ b.label or '–' }}</span>
+        <span class="text-muted small ms-auto">
+          {{ b.created_at.strftime('%d.%m.%Y %H:%M') if b.created_at else '–' }}
+        </span>
+      </li>
+      {% endfor %}
+    </ul>
+    {% else %}
+    <div class="text-center py-3 text-muted small">
+      <i class="bi bi-archive opacity-25 d-block fs-3 mb-1"></i>
+      Noch keine Backups
+    </div>
+    {% endif %}
+  </div>
+</div>
+{% endif %}
+
+<!-- Löschen -->
+<div class="mt-4">
+  <button type="button" class="btn btn-sm btn-outline-danger" data-bs-toggle="modal" data-bs-target="#deleteModal">
+    <i class="bi bi-trash me-1"></i>Gruppe löschen
+  </button>
+</div>
+
+<!-- Löschen-Modal -->
+<div class="modal fade" id="deleteModal" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header border-0 pb-0">
+        <h5 class="modal-title"><i class="bi bi-trash text-danger me-2"></i>Kundengruppe löschen</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        Soll die Gruppe <strong>{{ group.name }}</strong> wirklich gelöscht werden?
+        <p class="text-muted small mt-2 mb-0">
+          Kunden und Benutzer werden nicht gelöscht, nur die Gruppenzuordnung wird aufgehoben.
+        </p>
+      </div>
+      <div class="modal-footer border-0 pt-0">
+        <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Abbrechen</button>
+        <form method="post" action="/customer-groups/{{ group.id }}/delete" class="d-inline">
+          <button type="submit" class="btn btn-danger btn-sm">
+            <i class="bi bi-trash me-1"></i>Löschen
+          </button>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

@@ -6,9 +6,10 @@ from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
 
-from ..auth import login_required
+from .. import audit
+from ..auth import login_required, pop_flash, set_flash
 from ..database import get_db
-from ..settings_service import CATEGORY_LABELS, DEFINITIONS, SettingsService, get_settings_service
+from ..settings_service import CATEGORY_LABELS, DEFINITIONS, get_settings_service
 
 router = APIRouter(prefix="/settings", tags=["settings"])
 templates = Jinja2Templates(directory="app/templates")
@@ -23,6 +24,10 @@ def _require_admin(request: Request, db: Session):
     return None, user
 
 
+def _ip(request: Request) -> str:
+    return request.headers.get("X-Forwarded-For", request.client.host if request.client else "unknown")
+
+
 # ── GET /settings ─────────────────────────────────────────────────────────────
 
 @router.get("", response_class=HTMLResponse)
@@ -35,9 +40,11 @@ async def settings_index(
         return redirect
 
     svc = get_settings_service(db)
-    grouped = svc.get_all_by_category()
-
-    flash = request.session.pop("flash", None)
+    grouped_all = svc.get_all_by_category()
+    # SMTP → /mail-settings, TheSSLStore → /settings/integrations
+    excluded = {"smtp", "thesslstore"}
+    grouped = {k: v for k, v in grouped_all.items() if k not in excluded}
+    category_labels = {k: v for k, v in CATEGORY_LABELS.items() if k not in excluded}
 
     return templates.TemplateResponse(
         "settings/index.html",
@@ -45,8 +52,8 @@ async def settings_index(
             "request": request,
             "user": user,
             "grouped": grouped,
-            "category_labels": CATEGORY_LABELS,
-            "flash": flash,
+            "category_labels": category_labels,
+            "flash": pop_flash(request),
         },
     )
 
@@ -64,23 +71,54 @@ async def settings_save(
 
     form = await request.form()
     svc = get_settings_service(db)
+    referer = request.headers.get("referer", "/settings")
+    redirect_to = "/settings/integrations" if "integrations" in referer else "/settings"
 
     values: dict[str, str] = {}
     for key in DEFINITIONS:
         defn = DEFINITIONS[key]
+        if defn.category == "smtp":
+            continue  # SMTP wird über /mail-settings verwaltet
         if defn.value_type == "bool":
-            # Checkboxen werden nur gesendet wenn aktiviert
             values[key] = "true" if form.get(key) else "false"
         elif key in form:
             raw = str(form[key]).strip()
-            # Sensitive Felder: Leerstring = nicht überschreiben
             if defn.is_sensitive and not raw:
                 continue
             values[key] = raw
 
     svc.set_many(values, user_id=user.id)
-    request.session["flash"] = {"type": "success", "msg": "Einstellungen gespeichert."}
-    return RedirectResponse(url="/settings", status_code=303)
+    audit.log(db, "settings.saved", "settings", user.id, ip=_ip(request))
+    set_flash(request, "success", "Einstellungen gespeichert.")
+    return RedirectResponse(url=redirect_to, status_code=303)
+
+
+# ── GET /settings/integrations ────────────────────────────────────────────────
+
+@router.get("/integrations", response_class=HTMLResponse)
+async def integrations_index(
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    redirect, user = _require_admin(request, db)
+    if redirect:
+        return redirect
+
+    svc = get_settings_service(db)
+    grouped_all = svc.get_all_by_category()
+    thesslstore_settings = grouped_all.get("thesslstore", [])
+    thesslstore_enabled = svc.get_bool("thesslstore.enabled", default=False)
+
+    return templates.TemplateResponse(
+        "settings/integrations.html",
+        {
+            "request": request,
+            "user": user,
+            "thesslstore_settings": thesslstore_settings,
+            "thesslstore_enabled": thesslstore_enabled,
+            "flash": pop_flash(request),
+        },
+    )
 
 
 # ── POST /settings/test-connection (AJAX) ─────────────────────────────────────

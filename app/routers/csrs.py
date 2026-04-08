@@ -7,7 +7,10 @@ from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
 
 from .. import audit, models
-from ..auth import login_required, pop_flash, set_flash
+from ..auth import (
+    check_customer_access, forbidden_response,
+    get_accessible_customer_ids, login_required, pop_flash, set_flash,
+)
 from ..crypto import decrypt_private_key, generate_csr_and_key
 from ..database import get_db
 from ..stepup import require_stepup
@@ -37,14 +40,28 @@ async def csr_list(request: Request, db: Session = Depends(get_db)):
     q = request.query_params.get("q", "").strip()
     show_archived = request.query_params.get("archived", "0") == "1"
 
+    accessible_ids = get_accessible_customer_ids(user, db)
+
     query = db.query(models.CsrRequest)
+    if accessible_ids is not None:
+        # Techniker: nur CSRs mit zugänglichem Kunden ODER ohne Kunden (eigene CSRs)
+        query = query.filter(
+            (models.CsrRequest.customer_id.in_(accessible_ids)) |
+            (models.CsrRequest.customer_id == None)
+        )
     if not show_archived:
         query = query.filter(models.CsrRequest.is_archived == False)
     if q:
         query = query.filter(models.CsrRequest.common_name.ilike(f"%{q}%"))
     csrs = query.order_by(models.CsrRequest.created_at.desc()).all()
 
-    archived_count = db.query(models.CsrRequest).filter(models.CsrRequest.is_archived == True).count()
+    archived_q = db.query(models.CsrRequest).filter(models.CsrRequest.is_archived == True)
+    if accessible_ids is not None:
+        archived_q = archived_q.filter(
+            (models.CsrRequest.customer_id.in_(accessible_ids)) |
+            (models.CsrRequest.customer_id == None)
+        )
+    archived_count = archived_q.count()
 
     return templates.TemplateResponse(
         "csrs/list.html",
@@ -62,13 +79,17 @@ async def csr_new(request: Request, db: Session = Depends(get_db)):
     if isinstance(user, RedirectResponse):
         return user
 
-    customers = (
-        db.query(models.Customer)
-        .filter(models.Customer.is_archived == False)
-        .order_by(models.Customer.name)
-        .all()
-    )
-    domains = db.query(models.Domain).order_by(models.Domain.fqdn).all()
+    accessible_ids = get_accessible_customer_ids(user, db)
+    cust_q = db.query(models.Customer).filter(models.Customer.is_archived == False)
+    if accessible_ids is not None:
+        cust_q = cust_q.filter(models.Customer.id.in_(accessible_ids))
+    customers = cust_q.order_by(models.Customer.name).all()
+
+    dom_q = db.query(models.Domain)
+    if accessible_ids is not None:
+        dom_q = dom_q.filter(models.Domain.customer_id.in_(accessible_ids))
+    domains = dom_q.order_by(models.Domain.fqdn).all()
+
     csr_templates = db.query(models.CsrTemplate).order_by(
         models.CsrTemplate.is_default.desc(), models.CsrTemplate.name
     ).all()
@@ -120,14 +141,23 @@ async def csr_create(
         "ou": ou, "email": email, "key_size": key_size,
     }
 
+    # Kundenzugriff prüfen (falls ein Kunde ausgewählt wurde)
+    if customer_id.isdigit() and not check_customer_access(user, int(customer_id), db):
+        return forbidden_response()
+
+    accessible_ids = get_accessible_customer_ids(user, db)
+
     def render_error(msg: str):
-        customers = (
-            db.query(models.Customer)
-            .filter(models.Customer.is_archived == False)
-            .order_by(models.Customer.name)
-            .all()
-        )
-        domains = db.query(models.Domain).order_by(models.Domain.fqdn).all()
+        cust_q = db.query(models.Customer).filter(models.Customer.is_archived == False)
+        if accessible_ids is not None:
+            cust_q = cust_q.filter(models.Customer.id.in_(accessible_ids))
+        customers = cust_q.order_by(models.Customer.name).all()
+
+        dom_q = db.query(models.Domain)
+        if accessible_ids is not None:
+            dom_q = dom_q.filter(models.Domain.customer_id.in_(accessible_ids))
+        domains = dom_q.order_by(models.Domain.fqdn).all()
+
         csr_templates = db.query(models.CsrTemplate).order_by(
             models.CsrTemplate.is_default.desc(), models.CsrTemplate.name
         ).all()
@@ -213,6 +243,9 @@ async def csr_detail(csr_id: int, request: Request, db: Session = Depends(get_db
     if not csr:
         set_flash(request, "warning", "CSR nicht gefunden.")
         return RedirectResponse(url="/csrs", status_code=302)
+
+    if csr.customer_id and not check_customer_access(user, csr.customer_id, db):
+        return forbidden_response()
 
     # Letzte 20 Audit-Einträge zu diesem CSR
     audit_entries = (

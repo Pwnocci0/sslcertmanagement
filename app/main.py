@@ -9,9 +9,11 @@ from starlette.middleware.sessions import SessionMiddleware
 
 from .database import Base, engine
 from .routers import (
-    admin, auth, certificates, csrs, csrtemplates, customers,
-    dashboard, domains, exports, mfa, settings, stepup, tasks, thesslstore,
+    admin, auth, backups, certificates, csrs, csrtemplates, customer_groups, customers,
+    dashboard, domains, exports, mail_settings, mailtemplates, mfa, notifications,
+    settings, stepup, tasks, thesslstore,
 )
+from .scheduler import shutdown_scheduler, start_scheduler
 
 load_dotenv()
 
@@ -62,6 +64,17 @@ app.add_middleware(
 
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
+
+@app.on_event("startup")
+def on_startup():
+    start_scheduler()
+
+
+@app.on_event("shutdown")
+def on_shutdown():
+    shutdown_scheduler()
+
+
 # Routers einbinden
 app.include_router(auth.router)
 app.include_router(mfa.router)
@@ -76,7 +89,12 @@ app.include_router(stepup.router)
 app.include_router(tasks.router)
 app.include_router(admin.router)
 app.include_router(csrtemplates.router)
+app.include_router(customer_groups.router)
 app.include_router(exports.router)
+app.include_router(mail_settings.router)
+app.include_router(mailtemplates.router)
+app.include_router(notifications.router)
+app.include_router(backups.router)
 
 # Tabellen beim Start anlegen (nur für SQLite-Dev, nicht für Produktions-Migrations-Workflow)
 Base.metadata.create_all(bind=engine)

@@ -1,0 +1,200 @@
+{% extends "base.html" %}
+{% block title %}E-Mail / SMTP – SSL Manager{% endblock %}
+
+{% block content %}
+<div class="row g-4">
+  {% include "settings/_sidebar.html" %}
+  <div class="col-lg-10 col-md-9">
+
+<div class="d-flex align-items-center mb-3">
+  <i class="bi bi-envelope-gear fs-3 text-secondary me-2"></i>
+  <div>
+    <h1 class="h3 mb-0">E-Mail &amp; SMTP-Konfiguration</h1>
+    <p class="text-muted small mb-0">SMTP-Relay für automatische Benachrichtigungen</p>
+  </div>
+  <div class="ms-auto d-flex gap-2">
+    <a href="/mailtemplates" class="btn btn-sm btn-outline-secondary">
+      <i class="bi bi-file-text me-1"></i>Mailtemplates
+    </a>
+    <a href="/notifications" class="btn btn-sm btn-outline-secondary">
+      <i class="bi bi-bell me-1"></i>Versandhistorie
+    </a>
+  </div>
+</div>
+
+{% if flash %}
+<div class="alert alert-{{ flash.type }} alert-dismissible fade show" role="alert">
+  {% if flash.type == 'success' %}<i class="bi bi-check-circle-fill me-2"></i>
+  {% elif flash.type == 'danger' %}<i class="bi bi-x-circle-fill me-2"></i>
+  {% else %}<i class="bi bi-info-circle-fill me-2"></i>{% endif %}
+  {{ flash.msg }}
+  <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+</div>
+{% endif %}
+
+<div class="row g-3">
+  <!-- SMTP-Einstellungen -->
+  <div class="col-lg-7">
+    <div class="card border-0 shadow-sm">
+      <div class="card-header bg-transparent">
+        <i class="bi bi-server me-1"></i>SMTP-Konfiguration
+      </div>
+      <div class="card-body">
+        <form method="post" action="/mail-settings/save">
+
+          {% for s in settings %}
+          <div class="mb-3">
+            {% if s.value_type == 'bool' %}
+            <div class="form-check form-switch">
+              <input class="form-check-input" type="checkbox" role="switch"
+                     id="{{ s.key }}" name="{{ s.key }}"
+                     {% if s.value and s.value.lower() in ('true','1','yes','on') %}checked{% endif %}>
+              <label class="form-check-label fw-semibold" for="{{ s.key }}">{{ s.label }}</label>
+            </div>
+            {% elif s.is_sensitive %}
+            <label class="form-label fw-semibold" for="{{ s.key }}">{{ s.label }}</label>
+            <input type="password" class="form-control" id="{{ s.key }}" name="{{ s.key }}"
+                   autocomplete="new-password" placeholder="{% if s.value %}Wert gesetzt – leer lassen zum Beibehalten{% else %}Passwort eingeben{% endif %}">
+            {% if s.value %}
+            <div class="form-text text-success"><i class="bi bi-lock-fill me-1"></i>Wert verschlüsselt gespeichert.</div>
+            {% endif %}
+            {% else %}
+            <label class="form-label fw-semibold" for="{{ s.key }}">{{ s.label }}</label>
+            <input type="text" class="form-control" id="{{ s.key }}" name="{{ s.key }}"
+                   value="{{ s.display_value }}"
+                   {% if s.key == 'smtp.port' %}type="number" min="1" max="65535"{% endif %}>
+            {% endif %}
+            {% if s.description %}
+            <div class="form-text">{{ s.description }}</div>
+            {% endif %}
+          </div>
+          {% endfor %}
+
+          <div class="alert alert-info py-2">
+            <i class="bi bi-info-circle me-1"></i>
+            SMTP2GO: Host <code>mail.smtp2go.com</code>, Port <code>587</code> (STARTTLS), oder Port <code>465</code> (SSL).
+          </div>
+
+          <button type="submit" class="btn btn-primary">
+            <i class="bi bi-floppy me-1"></i>Einstellungen speichern
+          </button>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- Testmail + Status -->
+  <div class="col-lg-5">
+    <div class="card border-0 shadow-sm mb-3">
+      <div class="card-header bg-transparent">
+        <i class="bi bi-send me-1"></i>Testmail senden
+      </div>
+      <div class="card-body">
+        <div class="mb-3">
+          <label class="form-label fw-semibold" for="testEmail">Empfänger-Adresse</label>
+          <input type="email" class="form-control" id="testEmail"
+                 placeholder="test@example.com">
+        </div>
+        <button class="btn btn-outline-primary w-100" id="btnTestMail">
+          <i class="bi bi-send me-1"></i>Testmail senden
+        </button>
+        <div id="testMailResult" class="mt-2 d-none"></div>
+      </div>
+    </div>
+
+    <div class="card border-0 shadow-sm mb-3">
+      <div class="card-header bg-transparent">
+        <i class="bi bi-play-circle me-1"></i>Notification-Check
+      </div>
+      <div class="card-body">
+        <p class="text-muted small mb-2">
+          Läuft automatisch stündlich. Hier manuell auslösen:
+        </p>
+        <button class="btn btn-outline-secondary w-100" id="btnTriggerCheck">
+          <i class="bi bi-arrow-clockwise me-1"></i>Jetzt prüfen
+        </button>
+        <div id="checkResult" class="mt-2 d-none"></div>
+      </div>
+    </div>
+
+    {% if last_dispatches %}
+    <div class="card border-0 shadow-sm">
+      <div class="card-header bg-transparent d-flex justify-content-between align-items-center">
+        <span><i class="bi bi-clock-history me-1"></i>Letzte Versandvorgänge</span>
+        <a href="/notifications" class="btn btn-sm btn-outline-secondary">Alle anzeigen</a>
+      </div>
+      <div class="card-body p-0">
+        <ul class="list-group list-group-flush">
+          {% for d in last_dispatches %}
+          <li class="list-group-item py-2">
+            <div class="d-flex justify-content-between align-items-center">
+              <span class="small fw-semibold text-truncate" style="max-width: 200px">
+                {{ d.recipient_email }}
+              </span>
+              {% if d.status == 'sent' %}
+                <span class="badge bg-success-subtle text-success-emphasis border border-success-subtle">Gesendet</span>
+              {% elif d.status == 'failed' %}
+                <span class="badge bg-danger-subtle text-danger-emphasis border border-danger-subtle">Fehler</span>
+              {% else %}
+                <span class="badge bg-secondary">{{ d.status }}</span>
+              {% endif %}
+            </div>
+            <div class="text-muted small text-truncate">{{ d.subject_rendered or d.event_type }}</div>
+          </li>
+          {% endfor %}
+        </ul>
+      </div>
+    </div>
+    {% endif %}
+  </div>
+</div>
+
+<script>
+document.getElementById('btnTestMail').addEventListener('click', async function () {
+  const email = document.getElementById('testEmail').value.trim();
+  const resultDiv = document.getElementById('testMailResult');
+  if (!email) {
+    resultDiv.className = 'mt-2 alert alert-warning py-2';
+    resultDiv.textContent = 'Bitte eine E-Mail-Adresse eingeben.';
+    return;
+  }
+  this.disabled = true;
+  this.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Sendet…';
+  try {
+    const fd = new FormData();
+    fd.append('to_email', email);
+    const resp = await fetch('/mail-settings/test-mail', { method: 'POST', body: fd });
+    const data = await resp.json();
+    resultDiv.className = 'mt-2 alert py-2 ' + (data.ok ? 'alert-success' : 'alert-danger');
+    resultDiv.innerHTML = '<i class="bi bi-' + (data.ok ? 'check-circle-fill' : 'x-circle-fill') + ' me-1"></i>' + data.message;
+  } catch(e) {
+    resultDiv.className = 'mt-2 alert alert-danger py-2';
+    resultDiv.textContent = 'Netzwerkfehler: ' + e.message;
+  } finally {
+    this.disabled = false;
+    this.innerHTML = '<i class="bi bi-send me-1"></i>Testmail senden';
+  }
+});
+
+document.getElementById('btnTriggerCheck').addEventListener('click', async function () {
+  const resultDiv = document.getElementById('checkResult');
+  this.disabled = true;
+  this.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Prüfe…';
+  try {
+    const resp = await fetch('/mail-settings/trigger-check', { method: 'POST' });
+    const data = await resp.json();
+    resultDiv.className = 'mt-2 alert py-2 ' + (data.ok ? 'alert-success' : 'alert-warning');
+    resultDiv.innerHTML = '<i class="bi bi-info-circle me-1"></i>' + data.message;
+  } catch(e) {
+    resultDiv.className = 'mt-2 alert alert-danger py-2';
+    resultDiv.textContent = 'Fehler: ' + e.message;
+  } finally {
+    this.disabled = false;
+    this.innerHTML = '<i class="bi bi-arrow-clockwise me-1"></i>Jetzt prüfen';
+  }
+});
+</script>
+
+  </div><!-- col -->
+</div><!-- row -->
+{% endblock %}

@@ -11,7 +11,10 @@ from sqlalchemy.orm import Session
 from cryptography import x509
 
 from .. import audit, models
-from ..auth import login_required, pop_flash, set_flash
+from ..auth import (
+    check_customer_access, forbidden_response,
+    get_accessible_customer_ids, login_required, pop_flash, set_flash,
+)
 from ..crypto import parse_certificate_pem, split_pem_chain
 from ..database import get_db
 
@@ -34,21 +37,29 @@ def _parse_date(value: str) -> datetime | None:
     return None
 
 
-def _cert_form_context(db: Session) -> dict:
-    """Gemeinsame Kontext-Daten für das Zertifikats-Formular."""
+def _cert_form_context(user, db: Session) -> dict:
+    """Gemeinsame Kontext-Daten für das Zertifikats-Formular, gefiltert nach Zugriffsrechten."""
+    accessible_ids = get_accessible_customer_ids(user, db)
+
+    cust_q = db.query(models.Customer).filter(models.Customer.is_archived == False)
+    if accessible_ids is not None:
+        cust_q = cust_q.filter(models.Customer.id.in_(accessible_ids))
+
+    dom_q = db.query(models.Domain)
+    if accessible_ids is not None:
+        dom_q = dom_q.filter(models.Domain.customer_id.in_(accessible_ids))
+
+    csr_q = db.query(models.CsrRequest)
+    if accessible_ids is not None:
+        csr_q = csr_q.filter(
+            (models.CsrRequest.customer_id.in_(accessible_ids)) |
+            (models.CsrRequest.customer_id == None)
+        )
+
     return {
-        "customers": (
-            db.query(models.Customer)
-            .filter(models.Customer.is_archived == False)
-            .order_by(models.Customer.name)
-            .all()
-        ),
-        "domains": db.query(models.Domain).order_by(models.Domain.fqdn).all(),
-        "csrs": (
-            db.query(models.CsrRequest)
-            .order_by(models.CsrRequest.common_name)
-            .all()
-        ),
+        "customers": cust_q.order_by(models.Customer.name).all(),
+        "domains": dom_q.order_by(models.Domain.fqdn).all(),
+        "csrs": csr_q.order_by(models.CsrRequest.common_name).all(),
         "status_choices": models.CERT_STATUS_CHOICES,
     }
 
@@ -219,11 +230,19 @@ async def certificate_list(request: Request, db: Session = Depends(get_db)):
         return user
 
     show_archived = request.query_params.get("archived", "0") == "1"
+    accessible_ids = get_accessible_customer_ids(user, db)
+
     query = db.query(models.Certificate).join(models.Customer)
+    if accessible_ids is not None:
+        query = query.filter(models.Certificate.customer_id.in_(accessible_ids))
     if not show_archived:
         query = query.filter(models.Certificate.is_archived == False)
     certs = query.order_by(models.Certificate.valid_until).all()
-    archived_count = db.query(models.Certificate).filter(models.Certificate.is_archived == True).count()
+
+    archived_q = db.query(models.Certificate).filter(models.Certificate.is_archived == True)
+    if accessible_ids is not None:
+        archived_q = archived_q.filter(models.Certificate.customer_id.in_(accessible_ids))
+    archived_count = archived_q.count()
     return templates.TemplateResponse(
         "certificates/list.html",
         {
@@ -237,10 +256,23 @@ async def certificate_list(request: Request, db: Session = Depends(get_db)):
 # ── Neu anlegen ───────────────────────────────────────────────────────────────
 
 @router.get("/new", response_class=HTMLResponse)
-async def certificate_new(request: Request, db: Session = Depends(get_db)):
+async def certificate_new(
+    request: Request,
+    db: Session = Depends(get_db),
+    customer_id: int | None = None,
+    domain_id: int | None = None,
+):
     user = login_required(request, db)
     if isinstance(user, RedirectResponse):
         return user
+
+    # Validate prefill access
+    if customer_id and not check_customer_access(user, customer_id, db):
+        customer_id = None
+    if domain_id and customer_id:
+        dom = db.query(models.Domain).filter(models.Domain.id == domain_id).first()
+        if not dom or dom.customer_id != customer_id:
+            domain_id = None
 
     return templates.TemplateResponse(
         "certificates/form.html",
@@ -250,7 +282,9 @@ async def certificate_new(request: Request, db: Session = Depends(get_db)):
             "cert": None,
             "error": None,
             "flash": pop_flash(request),
-            **_cert_form_context(db),
+            "prefill_customer_id": customer_id,
+            "prefill_domain_id": domain_id,
+            **_cert_form_context(user, db),
         },
     )
 
@@ -277,6 +311,9 @@ async def certificate_create(
     user = login_required(request, db)
     if isinstance(user, RedirectResponse):
         return user
+
+    if not check_customer_access(user, customer_id, db):
+        return forbidden_response()
 
     cert = models.Certificate(
         customer_id=customer_id,
@@ -311,6 +348,9 @@ async def certificate_edit(cert_id: int, request: Request, db: Session = Depends
     if not cert:
         return RedirectResponse(url="/certificates", status_code=302)
 
+    if not check_customer_access(user, cert.customer_id, db):
+        return forbidden_response()
+
     return templates.TemplateResponse(
         "certificates/form.html",
         {
@@ -319,7 +359,9 @@ async def certificate_edit(cert_id: int, request: Request, db: Session = Depends
             "cert": cert,
             "error": None,
             "flash": pop_flash(request),
-            **_cert_form_context(db),
+            "prefill_customer_id": None,
+            "prefill_domain_id": None,
+            **_cert_form_context(user, db),
         },
     )
 
@@ -351,6 +393,11 @@ async def certificate_update(
     cert = db.query(models.Certificate).filter(models.Certificate.id == cert_id).first()
     if not cert:
         return RedirectResponse(url="/certificates", status_code=302)
+
+    if not check_customer_access(user, cert.customer_id, db):
+        return forbidden_response()
+    if not check_customer_access(user, customer_id, db):
+        return forbidden_response()
 
     cert.customer_id = customer_id
     cert.domain_id = int(domain_id) if domain_id.isdigit() else None
@@ -385,6 +432,9 @@ async def certificate_detail(cert_id: int, request: Request, db: Session = Depen
     cert = db.query(models.Certificate).filter(models.Certificate.id == cert_id).first()
     if not cert:
         return RedirectResponse(url="/certificates", status_code=302)
+
+    if not check_customer_access(user, cert.customer_id, db):
+        return forbidden_response()
 
     return templates.TemplateResponse(
         "certificates/detail.html",

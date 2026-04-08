@@ -19,6 +19,128 @@ from app.models import User
 from app.auth import hash_password
 
 
+_DEFAULT_TEMPLATES = [
+    {
+        "name": "Zertifikat läuft in 30 Tagen ab",
+        "template_key": "certificate_expiring_30_days",
+        "subject": "[Warnung] Zertifikat läuft in {{days_remaining}} Tagen ab: {{certificate_common_name}}",
+        "text_body": (
+            "SSL Cert Manager – Automatische Benachrichtigung\n"
+            "================================================\n\n"
+            "Schweregrad: {{severity}}\n"
+            "Ereignis:    Zertifikat läuft bald ab\n\n"
+            "Zertifikat:  {{certificate_common_name}}\n"
+            "Kunde:       {{customer_name}}\n"
+            "Gruppe:      {{customer_group_name}}\n"
+            "Gültig bis:  {{certificate_valid_to}}\n"
+            "Verbleibend: {{days_remaining}} Tage\n"
+            "SANs:        {{certificate_sans}}\n\n"
+            "Bitte erneuern Sie dieses Zertifikat zeitnah.\n\n"
+            "Portal: {{portal_url}}\n"
+        ),
+    },
+    {
+        "name": "Zertifikat läuft in 14 Tagen ab",
+        "template_key": "certificate_expiring_14_days",
+        "subject": "[KRITISCH] Zertifikat läuft in {{days_remaining}} Tagen ab: {{certificate_common_name}}",
+        "text_body": (
+            "SSL Cert Manager – DRINGENDE Benachrichtigung\n"
+            "==============================================\n\n"
+            "Schweregrad: {{severity}}\n"
+            "Ereignis:    Zertifikat läuft in Kürze ab!\n\n"
+            "Zertifikat:  {{certificate_common_name}}\n"
+            "Kunde:       {{customer_name}}\n"
+            "Gruppe:      {{customer_group_name}}\n"
+            "Gültig bis:  {{certificate_valid_to}}\n"
+            "Verbleibend: {{days_remaining}} Tage\n"
+            "SANs:        {{certificate_sans}}\n\n"
+            "HANDLUNGSBEDARF: Bitte erneuern Sie dieses Zertifikat SOFORT.\n\n"
+            "Portal: {{portal_url}}\n"
+        ),
+    },
+    {
+        "name": "Zertifikat abgelaufen",
+        "template_key": "certificate_expired",
+        "subject": "[KRITISCH] Zertifikat abgelaufen: {{certificate_common_name}}",
+        "text_body": (
+            "SSL Cert Manager – KRITISCHE Benachrichtigung\n"
+            "==============================================\n\n"
+            "Schweregrad: {{severity}}\n"
+            "Ereignis:    Zertifikat ist abgelaufen!\n\n"
+            "Zertifikat:  {{certificate_common_name}}\n"
+            "Kunde:       {{customer_name}}\n"
+            "Gruppe:      {{customer_group_name}}\n"
+            "Abgelaufen:  {{certificate_valid_to}}\n"
+            "SANs:        {{certificate_sans}}\n\n"
+            "Das Zertifikat ist abgelaufen und muss sofort erneuert werden.\n\n"
+            "Portal: {{portal_url}}\n"
+        ),
+    },
+    {
+        "name": "Zertifikat ungültig",
+        "template_key": "certificate_invalid",
+        "subject": "[Warnung] Zertifikat ungültig: {{certificate_common_name}}",
+        "text_body": (
+            "SSL Cert Manager – Automatische Benachrichtigung\n"
+            "================================================\n\n"
+            "Schweregrad: {{severity}}\n"
+            "Ereignis:    Zertifikat ungültig\n\n"
+            "Zertifikat:  {{certificate_common_name}}\n"
+            "Kunde:       {{customer_name}}\n"
+            "Gruppe:      {{customer_group_name}}\n"
+            "Status:      {{status}}\n"
+            "SANs:        {{certificate_sans}}\n\n"
+            "Portal: {{portal_url}}\n"
+        ),
+    },
+    {
+        "name": "Fehlende Chain",
+        "template_key": "certificate_missing_chain",
+        "subject": "[Warnung] Fehlende Chain: {{certificate_common_name}}",
+        "text_body": (
+            "SSL Cert Manager – Automatische Benachrichtigung\n"
+            "================================================\n\n"
+            "Schweregrad: {{severity}}\n"
+            "Ereignis:    Zertifikat ohne Intermediate-Chain\n\n"
+            "Zertifikat:  {{certificate_common_name}}\n"
+            "Kunde:       {{customer_name}}\n"
+            "Gruppe:      {{customer_group_name}}\n"
+            "SANs:        {{certificate_sans}}\n\n"
+            "Das Zertifikat ist hochgeladen, aber ohne Intermediate-Chain.\n"
+            "Bitte laden Sie die Chain-Datei nach.\n\n"
+            "Portal: {{portal_url}}\n"
+        ),
+    },
+]
+
+
+def _seed_default_templates(eng) -> None:
+    """Legt Standard-Mailtemplates an (nur wenn noch nicht vorhanden)."""
+    from datetime import datetime
+    with eng.connect() as conn:
+        for tpl in _DEFAULT_TEMPLATES:
+            existing = conn.execute(
+                text("SELECT id FROM mail_templates WHERE template_key = :k"),
+                {"k": tpl["template_key"]},
+            ).first()
+            if not existing:
+                conn.execute(
+                    text("""
+                        INSERT INTO mail_templates (name, template_key, subject, text_body, is_active, created_at, updated_at)
+                        VALUES (:name, :key, :subject, :body, 1, :now, :now)
+                    """),
+                    {
+                        "name": tpl["name"],
+                        "key": tpl["template_key"],
+                        "subject": tpl["subject"],
+                        "body": tpl["text_body"],
+                        "now": datetime.utcnow().isoformat(),
+                    },
+                )
+        conn.commit()
+    print("Standard-Mailtemplates angelegt.")
+
+
 def run_migrations():
     """Fügt fehlende Spalten zu bestehenden Tabellen hinzu."""
     inspector = inspect(engine)
@@ -182,6 +304,141 @@ def run_migrations():
             conn.commit()
         print("Migration: Tabelle 'customer_defaults' angelegt.")
 
+    # users: role-Spalte
+    if "users" in inspector.get_table_names():
+        existing_cols = [c["name"] for c in inspector.get_columns("users")]
+        if "role" not in existing_cols:
+            with engine.connect() as conn:
+                # Bestehende Benutzer: is_admin=True → role='admin', sonst 'technician'
+                conn.execute(text(
+                    "ALTER TABLE users ADD COLUMN role VARCHAR(20) NOT NULL DEFAULT 'admin'"
+                ))
+                conn.execute(text(
+                    "UPDATE users SET role = CASE WHEN is_admin = 1 THEN 'admin' ELSE 'technician' END"
+                ))
+                conn.commit()
+            print("Migration: Spalte 'role' zu 'users' hinzugefügt (bestehende Admins → 'admin').")
+
+    # customer_groups
+    if "customer_groups" not in inspector.get_table_names():
+        with engine.connect() as conn:
+            conn.execute(text("""
+                CREATE TABLE customer_groups (
+                    id INTEGER PRIMARY KEY,
+                    name VARCHAR(100) NOT NULL UNIQUE,
+                    description TEXT,
+                    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+                )
+            """))
+            conn.commit()
+        print("Migration: Tabelle 'customer_groups' angelegt.")
+
+    # user_customer_groups (Techniker ↔ Kundengruppen)
+    if "user_customer_groups" not in inspector.get_table_names():
+        with engine.connect() as conn:
+            conn.execute(text("""
+                CREATE TABLE user_customer_groups (
+                    user_id INTEGER NOT NULL REFERENCES users(id),
+                    group_id INTEGER NOT NULL REFERENCES customer_groups(id),
+                    PRIMARY KEY (user_id, group_id)
+                )
+            """))
+            conn.commit()
+        print("Migration: Tabelle 'user_customer_groups' angelegt.")
+
+    # customer_customer_groups (Kunden ↔ Kundengruppen)
+    if "customer_customer_groups" not in inspector.get_table_names():
+        with engine.connect() as conn:
+            conn.execute(text("""
+                CREATE TABLE customer_customer_groups (
+                    customer_id INTEGER NOT NULL REFERENCES customers(id),
+                    group_id INTEGER NOT NULL REFERENCES customer_groups(id),
+                    PRIMARY KEY (customer_id, group_id)
+                )
+            """))
+            conn.commit()
+        print("Migration: Tabelle 'customer_customer_groups' angelegt.")
+
+    # customer_groups: Benachrichtigungs-Spalten
+    if "customer_groups" in inspector.get_table_names():
+        existing_cols = [c["name"] for c in inspector.get_columns("customer_groups")]
+        with engine.connect() as conn:
+            changed = False
+            if "notification_enabled" not in existing_cols:
+                conn.execute(text(
+                    "ALTER TABLE customer_groups ADD COLUMN notification_enabled BOOLEAN NOT NULL DEFAULT 0"
+                ))
+                changed = True
+            if "notify_admins" not in existing_cols:
+                conn.execute(text(
+                    "ALTER TABLE customer_groups ADD COLUMN notify_admins BOOLEAN NOT NULL DEFAULT 0"
+                ))
+                changed = True
+            if "notification_types" not in existing_cols:
+                conn.execute(text(
+                    "ALTER TABLE customer_groups ADD COLUMN notification_types TEXT"
+                ))
+                changed = True
+            if "notification_severities" not in existing_cols:
+                conn.execute(text(
+                    "ALTER TABLE customer_groups ADD COLUMN notification_severities TEXT"
+                ))
+                changed = True
+            if changed:
+                conn.commit()
+                print("Migration: Benachrichtigungs-Spalten zu 'customer_groups' hinzugefügt.")
+
+    # mail_templates
+    if "mail_templates" not in inspector.get_table_names():
+        with engine.connect() as conn:
+            conn.execute(text("""
+                CREATE TABLE mail_templates (
+                    id INTEGER PRIMARY KEY,
+                    name VARCHAR(100) NOT NULL,
+                    template_key VARCHAR(100) NOT NULL UNIQUE,
+                    subject VARCHAR(255) NOT NULL,
+                    text_body TEXT NOT NULL,
+                    html_body TEXT,
+                    is_active BOOLEAN NOT NULL DEFAULT 1,
+                    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+                )
+            """))
+            conn.commit()
+        print("Migration: Tabelle 'mail_templates' angelegt.")
+        _seed_default_templates(engine)
+
+    # notification_dispatches
+    if "notification_dispatches" not in inspector.get_table_names():
+        with engine.connect() as conn:
+            conn.execute(text("""
+                CREATE TABLE notification_dispatches (
+                    id INTEGER PRIMARY KEY,
+                    event_type VARCHAR(50) NOT NULL,
+                    severity VARCHAR(20) NOT NULL,
+                    customer_id INTEGER REFERENCES customers(id),
+                    customer_group_id INTEGER REFERENCES customer_groups(id),
+                    certificate_id INTEGER REFERENCES certificates(id),
+                    recipient_email VARCHAR(200) NOT NULL,
+                    template_key VARCHAR(100),
+                    subject_rendered VARCHAR(255),
+                    body_rendered TEXT,
+                    sent_at DATETIME,
+                    status VARCHAR(20) NOT NULL DEFAULT 'pending',
+                    error_message TEXT,
+                    dedup_key VARCHAR(200),
+                    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+                )
+            """))
+            conn.execute(text(
+                "CREATE INDEX ix_notif_dedup ON notification_dispatches (dedup_key)"
+            ))
+            conn.execute(text(
+                "CREATE INDEX ix_notif_event ON notification_dispatches (event_type)"
+            ))
+            conn.commit()
+        print("Migration: Tabelle 'notification_dispatches' angelegt.")
+
     # certificate_notes
     if "certificate_notes" not in inspector.get_table_names():
         with engine.connect() as conn:
@@ -221,6 +478,36 @@ def run_migrations():
             conn.commit()
         print("Migration: Tabelle 'thesslstore_orders' angelegt.")
 
+    # backups
+    if "backups" not in inspector.get_table_names():
+        with engine.connect() as conn:
+            conn.execute(text("""
+                CREATE TABLE backups (
+                    id INTEGER PRIMARY KEY,
+                    backup_type VARCHAR(20) NOT NULL,
+                    customer_group_id INTEGER REFERENCES customer_groups(id),
+                    label VARCHAR(255),
+                    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    created_by_user_id INTEGER REFERENCES users(id),
+                    status VARCHAR(20) NOT NULL DEFAULT 'pending',
+                    archive_path VARCHAR(500),
+                    size_bytes INTEGER,
+                    checksum VARCHAR(64),
+                    metadata_json TEXT,
+                    restore_count INTEGER NOT NULL DEFAULT 0,
+                    last_restored_at DATETIME,
+                    error_message TEXT
+                )
+            """))
+            conn.execute(text(
+                "CREATE INDEX ix_backups_type ON backups (backup_type)"
+            ))
+            conn.execute(text(
+                "CREATE INDEX ix_backups_group ON backups (customer_group_id)"
+            ))
+            conn.commit()
+        print("Migration: Tabelle 'backups' angelegt.")
+
 
 def main():
     print("Erstelle Datenbankschema ...")
@@ -246,6 +533,7 @@ def main():
             hashed_password=hash_password(admin_password),
             is_active=True,
             is_admin=True,
+            role="admin",
         )
         db.add(user)
         db.commit()

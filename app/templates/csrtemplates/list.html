@@ -2,6 +2,10 @@
 {% block title %}CSR-Vorlagen – SSL Manager{% endblock %}
 
 {% block content %}
+<div class="row g-4">
+  {% include "settings/_sidebar.html" %}
+  <div class="col-lg-10 col-md-9">
+
 <div class="d-flex align-items-center justify-content-between mb-3">
   <h4 class="mb-0"><i class="bi bi-file-earmark-text me-2"></i>CSR-Vorlagen</h4>
   <a href="/csrtemplates/new" class="btn btn-primary btn-sm">
@@ -65,4 +69,7 @@
   </div>
 </div>
 {% endif %}
+
+  </div><!-- col -->
+</div><!-- row -->
 {% endblock %}

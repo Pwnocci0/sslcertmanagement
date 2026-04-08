@@ -2,6 +2,10 @@
 {% block title %}Anwendungslogs – SSL Manager{% endblock %}
 
 {% block content %}
+<div class="row g-4">
+  {% include "settings/_sidebar.html" %}
+  <div class="col-lg-10 col-md-9">
+
 <div class="d-flex align-items-center mb-3">
   <i class="bi bi-journal-text fs-3 text-secondary me-2"></i>
   <h1 class="h3 mb-0">Anwendungslogs</h1>
@@ -165,4 +169,7 @@ document.addEventListener('DOMContentLoaded', function () {
   });
 });
 </script>
+
+  </div><!-- col -->
+</div><!-- row -->
 {% endblock %}

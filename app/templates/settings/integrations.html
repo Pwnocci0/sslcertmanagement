@@ -1,0 +1,218 @@
+{% extends "base.html" %}
+{% block title %}Integrationen – SSL Manager{% endblock %}
+
+{% block content %}
+<div class="row g-4">
+  {% include "settings/_sidebar.html" %}
+
+  <div class="col-lg-10 col-md-9">
+
+    <div class="d-flex align-items-center mb-4">
+      <i class="bi bi-plug fs-3 text-secondary me-2"></i>
+      <h1 class="h3 mb-0">Integrationen</h1>
+    </div>
+
+    {% if flash %}
+    <div class="alert alert-{{ flash.type }} alert-dismissible fade show" role="alert">
+      {% if flash.type == 'success' %}<i class="bi bi-check-circle-fill me-2"></i>
+      {% elif flash.type == 'warning' %}<i class="bi bi-exclamation-triangle-fill me-2"></i>
+      {% elif flash.type == 'danger' %}<i class="bi bi-x-circle-fill me-2"></i>
+      {% else %}<i class="bi bi-info-circle-fill me-2"></i>{% endif %}
+      {{ flash.msg }}
+      <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+    {% endif %}
+
+    <!-- TheSSLStore -->
+    <div class="card border-0 shadow-sm mb-4">
+      <div class="card-header bg-transparent d-flex align-items-center gap-3">
+        <i class="bi bi-shop fs-5 text-primary"></i>
+        <div class="flex-grow-1">
+          <div class="fw-semibold">TheSSLStore</div>
+          <div class="text-muted small">CA-Reseller API – Zertifikate direkt bestellen und verwalten</div>
+        </div>
+        <form method="post" action="/settings/save" class="mb-0">
+          <!-- Alle anderen thesslstore-Keys als Hidden mitschicken (damit sie nicht gelöscht werden) -->
+          {% for s in thesslstore_settings %}
+          {% if s.key != 'thesslstore.enabled' and not s.is_sensitive %}
+          <input type="hidden" name="{{ s.key }}" value="{{ s.display_value }}">
+          {% endif %}
+          {% endfor %}
+          <div class="form-check form-switch mb-0">
+            <input class="form-check-input" type="checkbox" role="switch"
+                   id="thesslstore_enabled" name="thesslstore.enabled"
+                   {% if thesslstore_enabled %}checked{% endif %}
+                   onchange="this.form.submit()">
+            <label class="form-check-label fw-semibold {% if thesslstore_enabled %}text-success{% else %}text-muted{% endif %}"
+                   for="thesslstore_enabled">
+              {% if thesslstore_enabled %}Aktiviert{% else %}Deaktiviert{% endif %}
+            </label>
+          </div>
+        </form>
+      </div>
+
+      {% if thesslstore_enabled %}
+      <div class="card-body" id="thesslstoreConfig">
+        <form method="post" action="/settings/save">
+          <!-- Hidden: enabled bleibt gesetzt -->
+          <input type="hidden" name="thesslstore.enabled" value="true">
+
+          {% set cred_keys = ['thesslstore.partner_code_live', 'thesslstore.auth_token_live',
+                              'thesslstore.partner_code_sandbox', 'thesslstore.auth_token_sandbox'] %}
+          {% set live_items = thesslstore_settings | selectattr('key', 'in', ['thesslstore.partner_code_live', 'thesslstore.auth_token_live']) | list %}
+          {% set sandbox_items = thesslstore_settings | selectattr('key', 'in', ['thesslstore.partner_code_sandbox', 'thesslstore.auth_token_sandbox']) | list %}
+          {% set other_items = thesslstore_settings
+              | rejectattr('key', 'equalto', 'thesslstore.enabled')
+              | rejectattr('key', 'equalto', 'thesslstore.partner_code_live')
+              | rejectattr('key', 'equalto', 'thesslstore.auth_token_live')
+              | rejectattr('key', 'equalto', 'thesslstore.partner_code_sandbox')
+              | rejectattr('key', 'equalto', 'thesslstore.auth_token_sandbox')
+              | list %}
+
+          <!-- Allgemeine Einstellungen -->
+          {% for setting in other_items %}
+          <div class="row mb-3 align-items-start">
+            <label class="col-sm-4 col-form-label fw-semibold" for="s_{{ setting.key }}">
+              {{ setting.label }}
+            </label>
+            <div class="col-sm-8">
+              {% if setting.value_type == 'bool' %}
+                <div class="form-check form-switch mt-2">
+                  <input class="form-check-input" type="checkbox"
+                         role="switch" id="s_{{ setting.key }}" name="{{ setting.key }}"
+                         {% if setting.value and setting.value.lower() in ('true','1','yes','on') %}checked{% endif %}>
+                </div>
+              {% else %}
+                <input type="text" class="form-control" id="s_{{ setting.key }}"
+                       name="{{ setting.key }}" value="{{ setting.display_value }}">
+              {% endif %}
+              {% if setting.description %}
+              <div class="form-text text-muted">{{ setting.description }}</div>
+              {% endif %}
+            </div>
+          </div>
+          {% endfor %}
+
+          <!-- Credentials -->
+          <div class="row g-3 mt-1 mb-3">
+            <div class="col-md-6">
+              <div class="card border-success">
+                <div class="card-header bg-success bg-opacity-10 fw-semibold">
+                  <i class="bi bi-globe2 me-1 text-success"></i>Live-Zugangsdaten
+                </div>
+                <div class="card-body">
+                  {% for setting in live_items %}
+                  <div class="mb-3">
+                    <label class="form-label fw-semibold" for="s_{{ setting.key }}">
+                      {{ setting.label }}
+                      {% if setting.is_sensitive %}<i class="bi bi-lock-fill text-muted ms-1"></i>{% endif %}
+                    </label>
+                    {% if setting.is_sensitive %}
+                      <input type="password" class="form-control font-monospace"
+                             id="s_{{ setting.key }}" name="{{ setting.key }}"
+                             placeholder="Leer lassen zum Beibehalten" autocomplete="new-password">
+                      {% if setting.value %}
+                      <div class="form-text text-success"><i class="bi bi-check-circle me-1"></i>Wert gesetzt</div>
+                      {% else %}
+                      <div class="form-text text-warning"><i class="bi bi-exclamation-triangle me-1"></i>Noch nicht konfiguriert</div>
+                      {% endif %}
+                    {% else %}
+                      <input type="text" class="form-control font-monospace"
+                             id="s_{{ setting.key }}" name="{{ setting.key }}"
+                             value="{{ setting.display_value }}">
+                    {% endif %}
+                  </div>
+                  {% endfor %}
+                </div>
+              </div>
+            </div>
+            <div class="col-md-6">
+              <div class="card border-warning">
+                <div class="card-header bg-warning bg-opacity-10 fw-semibold">
+                  <i class="bi bi-cone-striped me-1 text-warning"></i>Sandbox-Zugangsdaten
+                </div>
+                <div class="card-body">
+                  {% for setting in sandbox_items %}
+                  <div class="mb-3">
+                    <label class="form-label fw-semibold" for="s_{{ setting.key }}">
+                      {{ setting.label }}
+                      {% if setting.is_sensitive %}<i class="bi bi-lock-fill text-muted ms-1"></i>{% endif %}
+                    </label>
+                    {% if setting.is_sensitive %}
+                      <input type="password" class="form-control font-monospace"
+                             id="s_{{ setting.key }}" name="{{ setting.key }}"
+                             placeholder="Leer lassen zum Beibehalten" autocomplete="new-password">
+                      {% if setting.value %}
+                      <div class="form-text text-success"><i class="bi bi-check-circle me-1"></i>Wert gesetzt</div>
+                      {% else %}
+                      <div class="form-text text-warning"><i class="bi bi-exclamation-triangle me-1"></i>Noch nicht konfiguriert</div>
+                      {% endif %}
+                    {% else %}
+                      <input type="text" class="form-control font-monospace"
+                             id="s_{{ setting.key }}" name="{{ setting.key }}"
+                             value="{{ setting.display_value }}">
+                    {% endif %}
+                  </div>
+                  {% endfor %}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="d-flex gap-2 align-items-center">
+            <button type="submit" class="btn btn-primary">
+              <i class="bi bi-floppy me-1"></i>Speichern
+            </button>
+            <button type="button" class="btn btn-outline-secondary" id="btnTestConn">
+              <i class="bi bi-plug me-1"></i>Verbindung testen
+            </button>
+            <span class="small" id="connResult"></span>
+            <a href="/thesslstore" class="btn btn-outline-primary ms-auto">
+              <i class="bi bi-shop me-1"></i>Zum TheSSLStore-Bereich
+            </a>
+          </div>
+        </form>
+      </div>
+      {% else %}
+      <div class="card-body text-muted">
+        <i class="bi bi-info-circle me-1"></i>
+        Aktivieren Sie die Integration, um TheSSLStore-Funktionen zu nutzen.
+      </div>
+      {% endif %}
+    </div>
+
+    <!-- Weitere Integrationen (Platzhalter) -->
+    <div class="card border-0 shadow-sm opacity-50">
+      <div class="card-header bg-transparent d-flex align-items-center gap-3">
+        <i class="bi bi-plus-circle fs-5 text-muted"></i>
+        <div>
+          <div class="fw-semibold text-muted">Weitere Integrationen</div>
+          <div class="text-muted small">Zukünftige Erweiterungen erscheinen hier</div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+document.getElementById('btnTestConn')?.addEventListener('click', async function () {
+  const btn = this;
+  const result = document.getElementById('connResult');
+  btn.disabled = true;
+  result.textContent = 'Teste …';
+  result.className = 'small text-muted';
+  try {
+    const resp = await fetch('/settings/test-connection', { method: 'POST' });
+    const data = await resp.json();
+    result.textContent = data.message;
+    result.className = 'small ' + (data.ok ? 'text-success' : 'text-danger');
+  } catch (e) {
+    result.textContent = 'Netzwerkfehler';
+    result.className = 'small text-danger';
+  } finally {
+    btn.disabled = false;
+  }
+});
+</script>
+{% endblock %}

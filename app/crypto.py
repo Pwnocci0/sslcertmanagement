@@ -215,10 +215,17 @@ def generate_pfx(
 
     Der gespeicherte (verschlüsselte) Private Key wird intern entschlüsselt
     und mit dem Export-Passwort des Benutzers neu gesichert.
-    Gibt rohe PFX-Bytes zurück.
+
+    Gibt rohe PFX-Bytes zurück. Die Verschlüsselung verwendet PBESv1 mit
+    SHA-1 und 3DES (pbeWithSHA1And3-KeyTripleDES-CBC), das von Windows Server
+    (MMC-Zertifikatsimport / PFXImportCertStore) zuverlässig unterstützt wird.
     """
     import re
-    from cryptography.hazmat.primitives.serialization import pkcs12
+    from cryptography.hazmat.primitives.serialization import PrivateFormat
+    from cryptography.hazmat.primitives.serialization.pkcs12 import (
+        PBES,
+        serialize_key_and_certificates,
+    )
 
     # Private Key mit App-Passphrase entschlüsseln
     key = serialization.load_pem_private_key(
@@ -239,14 +246,25 @@ def generate_pfx(
         ):
             cas.append(x509.load_pem_x509_certificate(c_pem.encode("utf-8")))
 
-    name_bytes = friendly_name.encode("utf-8") if friendly_name else None
-    pfx_bytes = pkcs12.serialize_key_and_certificates(
+    # Friendly Name: ASCII kodieren für maximale Windows-Kompatibilität
+    name_bytes = friendly_name.encode("ascii", errors="replace") if friendly_name else None
+
+    # Windows-kompatible Verschlüsselung:
+    # PBESv1 SHA1+3DES für Key/Cert-Bags, SHA-1-MAC
+    # (PBES2/AES-256 wird vom Windows-Zertifikatimport nicht unterstützt)
+    password_bytes = export_password.encode("utf-8")
+    enc = (
+        PrivateFormat.PKCS12
+        .encryption_builder()
+        .key_cert_algorithm(PBES.PBESv1SHA1And3KeyTripleDESCBC)
+        .hmac_hash(hashes.SHA1())
+        .build(password_bytes)
+    )
+
+    return serialize_key_and_certificates(
         name=name_bytes,
         key=key,
         cert=cert,
         cas=cas or None,
-        encryption_algorithm=serialization.BestAvailableEncryption(
-            export_password.encode("utf-8")
-        ),
+        encryption_algorithm=enc,
     )
-    return pfx_bytes

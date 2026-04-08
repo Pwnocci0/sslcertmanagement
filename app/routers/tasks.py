@@ -8,7 +8,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
 
-from ..auth import login_required, pop_flash
+from ..auth import get_accessible_customer_ids, login_required, pop_flash
 from ..database import get_db
 from .. import models
 
@@ -31,15 +31,20 @@ def _severity(days: int) -> str:
     return "secondary"
 
 
-def build_tasks(db: Session) -> list[dict]:
+def build_tasks(db: Session, accessible_customer_ids: list[int] | None = None) -> list[dict]:
     """Sammelt alle offenen Aufgaben / Handlungsbedarfe."""
     now = datetime.utcnow()
     tasks: list[dict] = []
 
+    def _cert_filter(q):
+        if accessible_customer_ids is not None:
+            q = q.filter(models.Certificate.customer_id.in_(accessible_customer_ids))
+        return q
+
     # ── Ablaufende Zertifikate ────────────────────────────────────────────────
     horizon = now + timedelta(days=_THRESHOLDS[-1])
     expiring = (
-        db.query(models.Certificate)
+        _cert_filter(db.query(models.Certificate))
         .filter(
             models.Certificate.valid_until != None,
             models.Certificate.valid_until <= horizon,
@@ -64,7 +69,7 @@ def build_tasks(db: Session) -> list[dict]:
 
     # ── Abgelaufene Zertifikate (aktiv im System) ─────────────────────────────
     expired = (
-        db.query(models.Certificate)
+        _cert_filter(db.query(models.Certificate))
         .filter(
             models.Certificate.valid_until != None,
             models.Certificate.valid_until < now,
@@ -87,7 +92,7 @@ def build_tasks(db: Session) -> list[dict]:
 
     # ── Zertifikate ohne Chain ────────────────────────────────────────────────
     no_chain = (
-        db.query(models.Certificate)
+        _cert_filter(db.query(models.Certificate))
         .filter(
             models.Certificate.cert_pem != None,
             models.Certificate.cert_pem != "",
@@ -109,7 +114,7 @@ def build_tasks(db: Session) -> list[dict]:
 
     # ── Zertifikate ohne verknüpften CSR (kein Schlüssel im Vault) ───────────
     no_key = (
-        db.query(models.Certificate)
+        _cert_filter(db.query(models.Certificate))
         .filter(
             models.Certificate.csr_request_id == None,
             models.Certificate.is_archived == False,
@@ -129,7 +134,7 @@ def build_tasks(db: Session) -> list[dict]:
 
     # ── Zertifikate mit Status "pending" ──────────────────────────────────────
     pending_certs = (
-        db.query(models.Certificate)
+        _cert_filter(db.query(models.Certificate))
         .filter(
             models.Certificate.status == "pending",
             models.Certificate.is_archived == False,
@@ -179,7 +184,8 @@ async def tasks_index(request: Request, db: Session = Depends(get_db)):
     if isinstance(user, RedirectResponse):
         return user
 
-    tasks = build_tasks(db)
+    accessible_ids = get_accessible_customer_ids(user, db)
+    tasks = build_tasks(db, accessible_customer_ids=accessible_ids)
 
     counts = {
         "critical": sum(1 for t in tasks if t["severity"] == "critical"),

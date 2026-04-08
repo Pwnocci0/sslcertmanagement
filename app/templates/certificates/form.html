@@ -175,7 +175,11 @@ MIIFaz...
             <select id="f_customer_id" name="customer_id" class="form-select" required>
               <option value="">– Bitte wählen –</option>
               {% for c in customers %}
-              <option value="{{ c.id }}" {% if cert and cert.customer_id == c.id %}selected{% endif %}>{{ c.name }}</option>
+              <option value="{{ c.id }}"
+                {% if cert and cert.customer_id == c.id %}selected
+                {% elif not cert and prefill_customer_id and c.id == prefill_customer_id %}selected{% endif %}>
+                {{ c.name }}
+              </option>
               {% endfor %}
             </select>
           </div>
@@ -184,7 +188,11 @@ MIIFaz...
             <select id="f_domain_id" name="domain_id" class="form-select">
               <option value="">– Keine –</option>
               {% for d in domains %}
-              <option value="{{ d.id }}" {% if cert and cert.domain_id == d.id %}selected{% endif %}>{{ d.fqdn }}</option>
+              <option value="{{ d.id }}"
+                {% if cert and cert.domain_id == d.id %}selected
+                {% elif not cert and prefill_domain_id and d.id == prefill_domain_id %}selected{% endif %}>
+                {{ d.fqdn }}
+              </option>
               {% endfor %}
             </select>
           </div>

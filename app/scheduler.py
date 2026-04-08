@@ -1,0 +1,101 @@
+"""Hintergrundjob-Scheduler für automatische Benachrichtigungen.
+
+Verwendet APScheduler mit BackgroundScheduler. Wird beim App-Start initialisiert
+und läuft im Hintergrund. Führt stündlich den Notification-Check durch.
+"""
+from __future__ import annotations
+
+import logging
+
+from apscheduler.schedulers.background import BackgroundScheduler
+
+logger = logging.getLogger(__name__)
+
+_scheduler: BackgroundScheduler | None = None
+
+
+def _run_daily_backup() -> None:
+    """Erstellt täglich um Mitternacht UTC ein globales Backup."""
+    logger.info("Automatisches tägliches Backup gestartet.")
+    try:
+        from .database import SessionLocal
+        from .services.backup import GlobalBackupService
+
+        db = SessionLocal()
+        try:
+            svc = GlobalBackupService(db)
+            backup = svc.create_backup(label="Automatisches tägliches Backup")
+            logger.info(
+                "Automatisches Backup erstellt: %s (%d Bytes)",
+                backup.archive_path, backup.size_bytes or 0,
+            )
+        finally:
+            db.close()
+    except Exception:
+        logger.exception("Unerwarteter Fehler beim automatischen Backup.")
+
+
+def _run_notification_check() -> None:
+    """Führt den Notification-Check durch (wird vom Scheduler aufgerufen)."""
+    logger.info("Notification-Check gestartet.")
+    try:
+        from .database import SessionLocal
+        from .services.notification import NotificationService
+
+        db = SessionLocal()
+        try:
+            svc = NotificationService(db)
+            sent, failed = svc.run_checks()
+            if sent or failed:
+                logger.info(
+                    "Notification-Check abgeschlossen: %d gesendet, %d fehlgeschlagen.",
+                    sent, failed,
+                )
+            else:
+                logger.debug("Notification-Check abgeschlossen: keine fälligen Benachrichtigungen.")
+        finally:
+            db.close()
+    except Exception:
+        logger.exception("Unerwarteter Fehler im Notification-Check.")
+
+
+def start_scheduler() -> None:
+    """Startet den Hintergrund-Scheduler."""
+    global _scheduler
+    if _scheduler and _scheduler.running:
+        return
+
+    _scheduler = BackgroundScheduler(timezone="UTC")
+    _scheduler.add_job(
+        _run_notification_check,
+        trigger="interval",
+        hours=1,
+        id="notification_check",
+        replace_existing=True,
+        misfire_grace_time=300,
+    )
+    _scheduler.add_job(
+        _run_daily_backup,
+        trigger="cron",
+        hour=0,
+        minute=5,
+        id="daily_backup",
+        replace_existing=True,
+        misfire_grace_time=3600,
+    )
+    _scheduler.start()
+    logger.info("Scheduler gestartet (stündlicher Notification-Check, tägliches Backup um 00:05 UTC).")
+
+
+def shutdown_scheduler() -> None:
+    """Stoppt den Scheduler sauber."""
+    global _scheduler
+    if _scheduler and _scheduler.running:
+        _scheduler.shutdown(wait=False)
+        logger.info("Scheduler gestoppt.")
+    _scheduler = None
+
+
+def trigger_now() -> None:
+    """Löst den Notification-Check sofort aus (für Tests/manuelles Auslösen)."""
+    _run_notification_check()

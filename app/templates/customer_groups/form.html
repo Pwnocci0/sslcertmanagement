@@ -1,0 +1,179 @@
+{% extends "base.html" %}
+{% block title %}{% if group %}Gruppe bearbeiten{% else %}Neue Kundengruppe{% endif %} – SSL Manager{% endblock %}
+
+{% block content %}
+<div class="d-flex align-items-center mb-3">
+  <i class="bi bi-collection fs-3 text-secondary me-2"></i>
+  <h1 class="h3 mb-0">{% if group %}Kundengruppe bearbeiten: {{ group.name }}{% else %}Neue Kundengruppe{% endif %}</h1>
+  <a href="{% if group %}/customer-groups/{{ group.id }}{% else %}/customer-groups{% endif %}"
+     class="btn btn-sm btn-outline-secondary ms-auto">
+    <i class="bi bi-arrow-left me-1"></i>Zurück
+  </a>
+</div>
+
+{% if error %}
+<div class="alert alert-danger">
+  <i class="bi bi-x-circle-fill me-2"></i>{{ error }}
+</div>
+{% endif %}
+
+<div class="card border-0 shadow-sm" style="max-width: 760px;">
+  <div class="card-body">
+    <form method="post" action="{% if group %}/customer-groups/{{ group.id }}/edit{% else %}/customer-groups/new{% endif %}">
+
+      <div class="mb-3">
+        <label class="form-label fw-semibold" for="name">Gruppenname <span class="text-danger">*</span></label>
+        <input type="text" class="form-control" id="name" name="name" required
+               value="{{ group.name if group else '' }}">
+      </div>
+
+      <div class="mb-3">
+        <label class="form-label fw-semibold" for="description">Beschreibung</label>
+        <input type="text" class="form-control" id="description" name="description"
+               value="{{ group.description if group and group.description else '' }}"
+               placeholder="Optional: kurze Beschreibung">
+      </div>
+
+      <div class="row g-3 mb-3">
+        <div class="col-md-6">
+          <label class="form-label fw-semibold"><i class="bi bi-building me-1"></i>Kunden</label>
+          {% if all_customers %}
+          <div class="border rounded p-2" style="max-height: 240px; overflow-y: auto;">
+            {% for c in all_customers %}
+            <div class="form-check">
+              <input class="form-check-input" type="checkbox" name="customer_ids"
+                     id="cust_{{ c.id }}" value="{{ c.id }}"
+                     {% if c.id in selected_customer_ids %}checked{% endif %}>
+              <label class="form-check-label" for="cust_{{ c.id }}">{{ c.name }}</label>
+            </div>
+            {% endfor %}
+          </div>
+          <div class="form-text">Kunden, die dieser Gruppe angehören.</div>
+          {% else %}
+          <div class="alert alert-info py-2 mb-0">
+            <i class="bi bi-info-circle me-1"></i>
+            Noch keine Kunden angelegt. <a href="/customers/new" class="alert-link">Kunden anlegen</a>
+          </div>
+          {% endif %}
+        </div>
+
+        <div class="col-md-6">
+          <label class="form-label fw-semibold"><i class="bi bi-person-gear me-1"></i>Techniker</label>
+          {% if technicians %}
+          <div class="border rounded p-2" style="max-height: 240px; overflow-y: auto;">
+            {% for t in technicians %}
+            <div class="form-check">
+              <input class="form-check-input" type="checkbox" name="user_ids"
+                     id="user_{{ t.id }}" value="{{ t.id }}"
+                     {% if t.id in selected_user_ids %}checked{% endif %}>
+              <label class="form-check-label" for="user_{{ t.id }}">
+                {{ t.username }}
+                <span class="text-muted small">{{ t.email }}</span>
+              </label>
+            </div>
+            {% endfor %}
+          </div>
+          <div class="form-text">Techniker mit Zugriff auf diese Gruppe.</div>
+          {% else %}
+          <div class="alert alert-info py-2 mb-0">
+            <i class="bi bi-info-circle me-1"></i>
+            Noch keine Techniker angelegt.
+          </div>
+          {% endif %}
+        </div>
+      </div>
+
+      <!-- Benachrichtigungs-Einstellungen -->
+      <hr class="my-4">
+      <h6 class="mb-3"><i class="bi bi-bell me-1"></i>Benachrichtigungen</h6>
+
+      <div class="mb-3">
+        <div class="form-check form-switch">
+          <input class="form-check-input" type="checkbox" id="notification_enabled"
+                 name="notification_enabled" role="switch"
+                 {% if group and group.notification_enabled %}checked{% endif %}
+                 onchange="toggleNotificationConfig()">
+          <label class="form-check-label fw-semibold" for="notification_enabled">
+            Benachrichtigungen für diese Gruppe aktivieren
+          </label>
+        </div>
+        <div class="form-text">Wenn aktiv, werden Techniker der Gruppe bei Ereignissen benachrichtigt.</div>
+      </div>
+
+      <div id="notificationConfig" {% if not group or not group.notification_enabled %}style="display:none"{% endif %}>
+        <div class="mb-3">
+          <div class="form-check form-switch">
+            <input class="form-check-input" type="checkbox" id="notify_admins"
+                   name="notify_admins" role="switch"
+                   {% if group and group.notify_admins %}checked{% endif %}>
+            <label class="form-check-label" for="notify_admins">
+              Administratoren zusätzlich benachrichtigen
+            </label>
+          </div>
+        </div>
+
+        <div class="row g-3 mb-3">
+          <div class="col-md-6">
+            <label class="form-label fw-semibold"><i class="bi bi-tag me-1"></i>Ereignistypen</label>
+            <div class="border rounded p-2">
+              {% for key, label in notification_types.items() %}
+              <div class="form-check">
+                <input class="form-check-input" type="checkbox"
+                       name="notification_type_ids" id="ntype_{{ key }}" value="{{ key }}"
+                       {% if key in selected_types %}checked{% endif %}>
+                <label class="form-check-label" for="ntype_{{ key }}">{{ label }}</label>
+              </div>
+              {% endfor %}
+            </div>
+            <div class="form-text">Kein Haken = keine Benachrichtigungen für diesen Typ.</div>
+          </div>
+
+          <div class="col-md-6">
+            <label class="form-label fw-semibold"><i class="bi bi-exclamation-triangle me-1"></i>Schweregrade</label>
+            <div class="border rounded p-2">
+              {% for key, label in notification_severities.items() %}
+              <div class="form-check">
+                <input class="form-check-input" type="checkbox"
+                       name="notification_severity_ids" id="nsev_{{ key }}" value="{{ key }}"
+                       {% if key in selected_severities %}checked{% endif %}>
+                <label class="form-check-label" for="nsev_{{ key }}">
+                  {% if key == 'critical' %}
+                    <span class="badge bg-danger me-1">Kritisch</span>
+                  {% elif key == 'warning' %}
+                    <span class="badge bg-warning text-dark me-1">Warnung</span>
+                  {% else %}
+                    <span class="badge bg-info text-dark me-1">Info</span>
+                  {% endif %}
+                  {{ label }}
+                </label>
+              </div>
+              {% endfor %}
+            </div>
+          </div>
+        </div>
+
+        <div class="alert alert-info py-2">
+          <i class="bi bi-info-circle me-1"></i>
+          Empfänger sind alle aktiven Techniker dieser Gruppe mit gültiger E-Mail-Adresse.
+          SMTP muss unter <a href="/mail-settings" class="alert-link">E-Mail-Einstellungen</a> konfiguriert und aktiviert sein.
+        </div>
+      </div>
+
+      <div class="d-flex gap-2">
+        <button type="submit" class="btn btn-primary">
+          <i class="bi bi-floppy me-1"></i>{% if group %}Speichern{% else %}Anlegen{% endif %}
+        </button>
+        <a href="{% if group %}/customer-groups/{{ group.id }}{% else %}/customer-groups{% endif %}"
+           class="btn btn-outline-secondary">Abbrechen</a>
+      </div>
+    </form>
+
+<script>
+function toggleNotificationConfig() {
+  const enabled = document.getElementById('notification_enabled').checked;
+  document.getElementById('notificationConfig').style.display = enabled ? '' : 'none';
+}
+</script>
+  </div>
+</div>
+{% endblock %}

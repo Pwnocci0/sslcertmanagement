@@ -351,3 +351,108 @@ Beim nächsten Login wird die MFA-Einrichtung erneut gestartet.
 | `audit_logs` | id, user_id, action, entity_type, entity_id, details, ip_address |
 
 **Zertifikat-Status:** `pending` · `active` · `expiring_soon` · `expired` · `revoked`
+
+---
+
+## Menüstruktur
+
+### Operative Navigation (alle Benutzer)
+| Menüpunkt | Beschreibung |
+|---|---|
+| Dashboard | Übersicht, ablaufende Zertifikate, offene Aufgaben |
+| Kunden | Kundenstammdaten, Domains und Zertifikate je Kunde |
+| Domains | Alle verwalteten Domains |
+| Zertifikate | Alle Zertifikate (gefiltert nach Zugriff bei Technikern) |
+| Aufgaben | Offene Handlungsbedarfe |
+
+### Einstellungen (nur Admins)
+Erreichbar über den **Einstellungen**-Link in der Navigationsleiste.
+
+| Bereich | URL | Beschreibung |
+|---|---|---|
+| Allgemein & Sicherheit | `/settings` | App-Name, Base-URL, MFA-Pflicht, Session-Timeout, Passwortregeln |
+| Benutzer | `/admin/users` | Benutzer anlegen, bearbeiten, deaktivieren, MFA zurücksetzen |
+| Kundengruppen | `/customer-groups` | Techniker-Zuordnung, Benachrichtigungsregeln |
+| Mail / SMTP | `/mail-settings` | SMTP-Relay konfigurieren, Test-Mail senden |
+| Mailtemplates | `/mailtemplates` | E-Mail-Vorlagen mit `{{Platzhalter}}`-Syntax |
+| Versandhistorie | `/notifications` | Alle gesendeten Benachrichtigungen |
+| Integrationen | `/settings/integrations` | TheSSLStore ein-/ausschalten |
+| CSR-Vorlagen | `/csrtemplates` | Vorlagen für CSR-Erstellung |
+| System-Status | `/admin` | DB, Scheduler, Zertifikats-Statistiken |
+| Anwendungslogs | `/admin/logs` | Gefilterte Log-Ausgabe |
+
+---
+
+## Einstellungen
+
+Alle Einstellungen werden in der Tabelle `app_settings` (Key-Value) gespeichert.
+Sensible Werte (API-Tokens, SMTP-Passwort) werden Fernet-verschlüsselt abgelegt.
+
+Kategorien: `general` · `security` · `network` · `certificates` · `thesslstore` · `smtp`
+
+---
+
+## Integrationen
+
+### TheSSLStore
+Aktiviert unter **Einstellungen → Integrationen**.
+
+- **Deaktiviert (Standard):** Keine API-Aufrufe, keine UI-Elemente für TheSSLStore.
+- **Aktiviert:** Produkt-Sync, Bestellverwaltung, Sandbox/Live-Toggle.
+
+Technisch: Jede TheSSLStore-Route prüft `is_integration_enabled("thesslstore", db)` serverseitig und leitet bei Deaktivierung zu `/settings/integrations` weiter.
+
+---
+
+## Zertifikats-Workflow
+
+### Aus dem Kontext erstellen
+Beim Anlegen eines Zertifikats werden Kunde und Domain vorausgewählt, wenn man aus dem Kontext kommt:
+
+| Einstiegspunkt | Vorauswahl |
+|---|---|
+| Kunden-Detailseite → „+" | Kunde vorausgewählt |
+| Domain-Detailseite → „Zertifikat" | Kunde + Domain vorausgewählt |
+| `/certificates/new` direkt | Keine Vorauswahl |
+
+URL-Parameter: `/certificates/new?customer_id=5&domain_id=12`
+
+Das Backend validiert den Zugriff auf Kunde/Domain vor der Vorauswahl.
+
+---
+
+## E-Mail-Benachrichtigungen
+
+Konfiguration unter **Einstellungen → Mail / SMTP**.
+
+**SMTP2GO** (empfohlen): Host `mail.smtp2go.com`, Port `587`, STARTTLS.
+
+### Mailtemplates
+Verwaltet unter **Einstellungen → Mailtemplates**.
+
+Verfügbare Platzhalter: `{{customer_name}}` · `{{certificate_common_name}}` · `{{days_remaining}}` · `{{certificate_valid_to}}` · `{{severity}}` · `{{portal_url}}` u.a.
+
+Standard-Templates (automatisch angelegt):
+- `certificate_expiring_30_days` – Ablauf in 30 Tagen (Warnung)
+- `certificate_expiring_14_days` – Ablauf in 14 Tagen (Kritisch)
+- `certificate_expired` – Abgelaufen
+- `certificate_invalid` – Ungültig
+- `certificate_missing_chain` – Fehlende Intermediate-Chain
+
+### Automatische Prüfung
+Der Scheduler prüft stündlich alle Kundengruppen mit aktivierten Benachrichtigungen.
+Duplikatschutz: Gleiche Benachrichtigung wird nicht mehrfach innerhalb eines konfigurierten Zeitfensters verschickt.
+
+---
+
+## MFA-Reset durch Admin
+
+Admins können die MFA eines Benutzers zurücksetzen unter **Einstellungen → Benutzer**.
+
+**Auswirkung:**
+- TOTP-Secret wird gelöscht
+- `mfa_setup_completed` wird auf `false` gesetzt
+- Recovery Codes werden gelöscht
+- Der Benutzer muss beim nächsten Login MFA neu einrichten (kann sich ohne abgeschlossene MFA-Einrichtung nicht anmelden)
+
+Die Aktion wird im Audit-Log erfasst (wer, wen, wann).

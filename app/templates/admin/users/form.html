@@ -1,0 +1,159 @@
+{% extends "base.html" %}
+{% block title %}{% if edit_user %}Benutzer bearbeiten{% else %}Neuer Benutzer{% endif %} – SSL Manager{% endblock %}
+
+{% block content %}
+<div class="row g-4">
+  {% include "settings/_sidebar.html" %}
+  <div class="col-lg-10 col-md-9">
+
+<div class="d-flex align-items-center mb-3">
+  <i class="bi bi-person{% if edit_user %}-gear{% else %}-plus{% endif %} fs-3 text-secondary me-2"></i>
+  <h1 class="h3 mb-0">{% if edit_user %}Benutzer bearbeiten: {{ edit_user.username }}{% else %}Neuer Benutzer{% endif %}</h1>
+  <a href="/admin/users" class="btn btn-sm btn-outline-secondary ms-auto">
+    <i class="bi bi-arrow-left me-1"></i>Zurück
+  </a>
+</div>
+
+{% if error %}
+<div class="alert alert-danger">
+  <i class="bi bi-x-circle-fill me-2"></i>{{ error }}
+</div>
+{% endif %}
+
+<div class="card border-0 shadow-sm" style="max-width: 680px;">
+  <div class="card-body">
+    <form method="post" action="{% if edit_user %}/admin/users/{{ edit_user.id }}/edit{% else %}/admin/users/new{% endif %}">
+
+      {% if not edit_user %}
+      <div class="mb-3">
+        <label class="form-label fw-semibold" for="username">Benutzername <span class="text-danger">*</span></label>
+        <input type="text" class="form-control" id="username" name="username"
+               required autocomplete="off"
+               value="{{ edit_user.username if edit_user else '' }}">
+      </div>
+      {% else %}
+      <div class="mb-3">
+        <label class="form-label fw-semibold">Benutzername</label>
+        <input type="text" class="form-control" value="{{ edit_user.username }}" disabled>
+        <div class="form-text">Der Benutzername kann nicht geändert werden.</div>
+      </div>
+      {% endif %}
+
+      <div class="mb-3">
+        <label class="form-label fw-semibold" for="email">E-Mail <span class="text-danger">*</span></label>
+        <input type="email" class="form-control" id="email" name="email"
+               required autocomplete="off"
+               value="{{ edit_user.email if edit_user else '' }}">
+      </div>
+
+      <div class="mb-3">
+        <label class="form-label fw-semibold" for="password">
+          Passwort {% if not edit_user %}<span class="text-danger">*</span>{% endif %}
+        </label>
+        <input type="password" class="form-control" id="password" name="password"
+               {% if not edit_user %}required{% endif %}
+               autocomplete="new-password" minlength="8">
+        {% if edit_user %}
+        <div class="form-text">Leer lassen, um das aktuelle Passwort beizubehalten.</div>
+        {% else %}
+        <div class="form-text">Mindestens 8 Zeichen.</div>
+        {% endif %}
+      </div>
+
+      <div class="mb-3">
+        <label class="form-label fw-semibold">Rolle <span class="text-danger">*</span></label>
+        <div class="d-flex gap-3">
+          <div class="form-check">
+            <input class="form-check-input" type="radio" name="role" id="role_admin" value="admin"
+                   {% if edit_user and edit_user.is_admin %}checked{% elif not edit_user %}{% endif %}
+                   onchange="toggleGroups()">
+            <label class="form-check-label" for="role_admin">
+              <i class="bi bi-shield-fill text-danger me-1"></i>Administrator
+              <div class="text-muted small">Vollzugriff auf alle Kunden und Einstellungen</div>
+            </label>
+          </div>
+          <div class="form-check">
+            <input class="form-check-input" type="radio" name="role" id="role_technician" value="technician"
+                   {% if not edit_user or not edit_user.is_admin %}checked{% endif %}
+                   onchange="toggleGroups()">
+            <label class="form-check-label" for="role_technician">
+              <i class="bi bi-person-gear text-secondary me-1"></i>Techniker
+              <div class="text-muted small">Zugriff nur auf zugewiesene Kundengruppen</div>
+            </label>
+          </div>
+        </div>
+      </div>
+
+      <div class="mb-3" id="groupsSection"
+           {% if edit_user and edit_user.is_admin %}style="display:none"{% endif %}>
+        <label class="form-label fw-semibold">Kundengruppen</label>
+
+        {% if edit_user %}
+        <!-- Aktuelle Zuordnung -->
+        <div class="mb-2">
+          {% set assigned = groups | selectattr('id', 'in', selected_group_ids) | list %}
+          {% if assigned %}
+            <div class="d-flex flex-wrap gap-1 mb-1">
+              {% for g in assigned %}
+              <a href="/customer-groups/{{ g.id }}"
+                 class="badge bg-info-subtle text-info-emphasis border border-info-subtle text-decoration-none"
+                 target="_blank" title="{{ g.description or '' }}">
+                <i class="bi bi-collection me-1"></i>{{ g.name }}
+              </a>
+              {% endfor %}
+            </div>
+            <div class="form-text text-muted">Aktuell zugeordnet. Haken entfernen zum Austragen.</div>
+          {% else %}
+            <div class="text-muted small mb-1">
+              <i class="bi bi-dash-circle me-1"></i>Keine Kundengruppe zugeordnet.
+            </div>
+          {% endif %}
+        </div>
+        {% endif %}
+
+        {% if groups %}
+        <div class="border rounded p-2" style="max-height: 200px; overflow-y: auto;">
+          {% for g in groups %}
+          <div class="form-check">
+            <input class="form-check-input" type="checkbox" name="group_ids"
+                   id="group_{{ g.id }}" value="{{ g.id }}"
+                   {% if g.id in selected_group_ids %}checked{% endif %}>
+            <label class="form-check-label" for="group_{{ g.id }}">
+              {{ g.name }}
+              {% if g.description %}
+                <span class="text-muted small ms-1">– {{ g.description }}</span>
+              {% endif %}
+            </label>
+          </div>
+          {% endfor %}
+        </div>
+        <div class="form-text">Kein Haken = Zugriff auf keine Kunden.</div>
+        {% else %}
+        <div class="alert alert-info py-2 mb-0">
+          <i class="bi bi-info-circle me-1"></i>
+          Noch keine Kundengruppen angelegt.
+          <a href="/customer-groups/new" class="alert-link">Gruppe anlegen</a>
+        </div>
+        {% endif %}
+      </div>
+
+      <div class="d-flex gap-2">
+        <button type="submit" class="btn btn-primary">
+          <i class="bi bi-floppy me-1"></i>{% if edit_user %}Speichern{% else %}Anlegen{% endif %}
+        </button>
+        <a href="/admin/users" class="btn btn-outline-secondary">Abbrechen</a>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script>
+function toggleGroups() {
+  const isAdmin = document.getElementById('role_admin').checked;
+  document.getElementById('groupsSection').style.display = isAdmin ? 'none' : '';
+}
+</script>
+
+  </div><!-- col -->
+</div><!-- row -->
+{% endblock %}

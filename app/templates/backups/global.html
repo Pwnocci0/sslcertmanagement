@@ -1,0 +1,125 @@
+{% extends "base.html" %}
+{% block title %}Backups – SSL Manager{% endblock %}
+
+{% block content %}
+<div class="row g-4">
+  {% include "settings/_sidebar.html" %}
+  <div class="col-lg-10 col-md-9">
+
+    <div class="d-flex align-items-center mb-3">
+      <i class="bi bi-archive fs-3 text-secondary me-2"></i>
+      <div>
+        <h1 class="h3 mb-0">Globale Backups</h1>
+        <p class="text-muted small mb-0">Vollständige Datenbank-Snapshots</p>
+      </div>
+      <form method="post" action="/backups/global/create" class="ms-auto">
+        <button type="submit" class="btn btn-success btn-sm">
+          <i class="bi bi-plus-lg me-1"></i>Backup erstellen
+        </button>
+      </form>
+    </div>
+
+    {% if flash %}
+    <div class="alert alert-{{ flash.type }} alert-dismissible fade show" role="alert">
+      {% if flash.type == 'success' %}<i class="bi bi-check-circle-fill me-2"></i>
+      {% elif flash.type == 'warning' %}<i class="bi bi-exclamation-triangle-fill me-2"></i>
+      {% elif flash.type == 'danger' %}<i class="bi bi-x-circle-fill me-2"></i>
+      {% else %}<i class="bi bi-info-circle-fill me-2"></i>{% endif %}
+      {{ flash.msg }}
+      <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+    {% endif %}
+
+    <div class="alert alert-info py-2 mb-3">
+      <i class="bi bi-info-circle me-1"></i>
+      Globale Backups sichern die gesamte SQLite-Datenbank als komprimiertes Archiv.
+      Ein Restore überschreibt die aktive Datenbank – danach ist ein Neustart der Anwendung empfohlen.
+    </div>
+
+    <div class="card border-0 shadow-sm">
+      <div class="card-body p-0">
+        {% if backups %}
+        <div class="table-responsive">
+          <table class="table table-hover align-middle mb-0">
+            <thead class="table-light">
+              <tr>
+                <th>Bezeichnung</th>
+                <th>Erstellt</th>
+                <th class="text-center">Status</th>
+                <th class="text-end">Größe</th>
+                <th>Prüfsumme (SHA-256)</th>
+                <th class="text-center">Restores</th>
+                <th class="text-end pe-3">Aktionen</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for b in backups %}
+              <tr>
+                <td class="fw-semibold">{{ b.label or '–' }}</td>
+                <td class="text-muted small">
+                  {{ b.created_at.strftime('%d.%m.%Y %H:%M') if b.created_at else '–' }}
+                  {% if b.created_by %}
+                    <span class="text-muted">· {{ b.created_by.username }}</span>
+                  {% endif %}
+                </td>
+                <td class="text-center">
+                  {% if b.status == 'completed' %}
+                    <span class="badge bg-success-subtle text-success-emphasis border border-success-subtle">OK</span>
+                  {% elif b.status == 'failed' %}
+                    <span class="badge bg-danger" title="{{ b.error_message or '' }}">Fehler</span>
+                  {% else %}
+                    <span class="badge bg-secondary">{{ b.status }}</span>
+                  {% endif %}
+                </td>
+                <td class="text-end text-muted small">{{ human_size(b.size_bytes) }}</td>
+                <td class="font-monospace small text-muted" style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"
+                    title="{{ b.checksum or '' }}">
+                  {{ b.checksum[:16] ~ '…' if b.checksum else '–' }}
+                </td>
+                <td class="text-center text-muted small">
+                  {{ b.restore_count or 0 }}
+                  {% if b.last_restored_at %}
+                    <div class="text-muted" style="font-size:.7rem">
+                      zuletzt {{ b.last_restored_at.strftime('%d.%m.%Y') }}
+                    </div>
+                  {% endif %}
+                </td>
+                <td class="text-end pe-3">
+                  <div class="d-flex justify-content-end gap-1">
+                    {% if b.status == 'completed' %}
+                    <a href="/backups/{{ b.id }}/download"
+                       class="btn btn-sm btn-outline-secondary" title="Herunterladen">
+                      <i class="bi bi-download"></i>
+                    </a>
+                    <form method="post" action="/backups/{{ b.id }}/restore-global" class="d-inline"
+                          onsubmit="return confirm('Datenbank aus Backup \'{{ b.label }}\' wiederherstellen?\n\nDie aktuelle Datenbank wird überschrieben!\n\nNach dem Restore bitte die Anwendung neu starten.')">
+                      <button type="submit" class="btn btn-sm btn-outline-warning" title="Wiederherstellen">
+                        <i class="bi bi-arrow-counterclockwise"></i>
+                      </button>
+                    </form>
+                    {% endif %}
+                    <form method="post" action="/backups/{{ b.id }}/delete" class="d-inline"
+                          onsubmit="return confirm('Backup \'{{ b.label }}\' löschen?')">
+                      <button type="submit" class="btn btn-sm btn-outline-danger" title="Löschen">
+                        <i class="bi bi-trash"></i>
+                      </button>
+                    </form>
+                  </div>
+                </td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        {% else %}
+        <div class="text-center py-5 text-muted">
+          <i class="bi bi-archive fs-1 d-block mb-2 opacity-25"></i>
+          Noch keine globalen Backups vorhanden.
+        </div>
+        {% endif %}
+      </div>
+    </div>
+
+  </div><!-- col -->
+</div><!-- row -->
+{% endblock %}

@@ -27,7 +27,7 @@
     <a href="/domains/{{ domain.id }}/edit" class="btn btn-outline-secondary btn-sm">
       <i class="bi bi-pencil me-1"></i>Bearbeiten
     </a>
-    <a href="/certificates/new" class="btn btn-outline-success btn-sm">
+    <a href="/certificates/new?customer_id={{ domain.customer_id }}&domain_id={{ domain.id }}" class="btn btn-outline-success btn-sm" title="Neues Zertifikat für diese Domain">
       <i class="bi bi-plus-lg me-1"></i>Zertifikat
     </a>
   </div>
@@ -76,7 +76,7 @@
     <div class="card border-0 shadow-sm">
       <div class="card-header bg-white d-flex justify-content-between align-items-center border-bottom">
         <span class="fw-semibold"><i class="bi bi-patch-check me-1 text-success"></i>Zertifikate</span>
-        <a href="/certificates/new" class="btn btn-sm btn-outline-success">
+        <a href="/certificates/new?customer_id={{ domain.customer_id }}&domain_id={{ domain.id }}" class="btn btn-sm btn-outline-success" title="Neues Zertifikat">
           <i class="bi bi-plus-lg"></i>
         </a>
       </div>
@@ -133,7 +133,7 @@
         <i class="bi bi-patch-check opacity-25 d-block fs-3 mb-2"></i>
         Noch keine Zertifikate für diese Domain.
         <div class="mt-2">
-          <a href="/certificates/new" class="btn btn-sm btn-outline-success">Zertifikat anlegen</a>
+          <a href="/certificates/new?customer_id={{ domain.customer_id }}&domain_id={{ domain.id }}" class="btn btn-sm btn-outline-success">Zertifikat anlegen</a>
         </div>
       </div>
       {% endif %}

@@ -58,6 +58,7 @@ CATEGORY_LABELS = {
     "network":      "Netzwerk",
     "certificates": "Zertifikate",
     "thesslstore":  "TheSSLStore API",
+    "smtp":         "E-Mail / SMTP",
 }
 
 DEFINITIONS: dict[str, SettingDef] = {
@@ -172,6 +173,12 @@ DEFINITIONS: dict[str, SettingDef] = {
     ),
 
     # ── TheSSLStore ───────────────────────────────────────────────────────────
+    "thesslstore.enabled": SettingDef(
+        default="false",
+        value_type="bool", category="thesslstore", is_sensitive=False,
+        label="TheSSLStore-Integration aktiviert",
+        description="Aktiviert die TheSSLStore-Integration. Bei Deaktivierung sind keine API-Aufrufe möglich.",
+    ),
     "thesslstore.sandbox": SettingDef(
         default="true",
         value_type="bool", category="thesslstore", is_sensitive=False,
@@ -218,6 +225,68 @@ DEFINITIONS: dict[str, SettingDef] = {
         default="CertMgr/1.0",
         value_type="string", category="thesslstore", is_sensitive=False,
         label="User Agent",
+        description="",
+    ),
+
+    # ── E-Mail / SMTP ─────────────────────────────────────────────────────────
+    "smtp.enabled": SettingDef(
+        default="false",
+        value_type="bool", category="smtp", is_sensitive=False,
+        label="E-Mail-Versand aktiv",
+        description="Muss aktiviert sein, damit Benachrichtigungen verschickt werden.",
+    ),
+    "smtp.host": SettingDef(
+        default="",
+        value_type="string", category="smtp", is_sensitive=False,
+        label="SMTP Host",
+        description="Hostname des SMTP-Relay, z. B. mail.smtp2go.com.",
+    ),
+    "smtp.port": SettingDef(
+        default="587",
+        value_type="int", category="smtp", is_sensitive=False,
+        label="SMTP Port",
+        description="Standard: 587 (STARTTLS), 465 (SSL), 25 (unverschlüsselt).",
+    ),
+    "smtp.username": SettingDef(
+        default="",
+        value_type="string", category="smtp", is_sensitive=False,
+        label="SMTP Benutzername",
+        description="",
+    ),
+    "smtp.password": SettingDef(
+        default="",
+        value_type="string", category="smtp", is_sensitive=True,
+        label="SMTP Passwort",
+        description="Wird verschlüsselt in der Datenbank gespeichert.",
+    ),
+    "smtp.use_tls": SettingDef(
+        default="true",
+        value_type="bool", category="smtp", is_sensitive=False,
+        label="STARTTLS verwenden",
+        description="Empfohlen für Port 587.",
+    ),
+    "smtp.use_ssl": SettingDef(
+        default="false",
+        value_type="bool", category="smtp", is_sensitive=False,
+        label="SSL verwenden",
+        description="Für Port 465.",
+    ),
+    "smtp.from_email": SettingDef(
+        default="",
+        value_type="string", category="smtp", is_sensitive=False,
+        label="Absenderadresse",
+        description="z. B. noreply@example.com.",
+    ),
+    "smtp.from_name": SettingDef(
+        default="SSL Cert Manager",
+        value_type="string", category="smtp", is_sensitive=False,
+        label="Absendername (optional)",
+        description="",
+    ),
+    "smtp.reply_to": SettingDef(
+        default="",
+        value_type="string", category="smtp", is_sensitive=False,
+        label="Reply-To (optional)",
         description="",
     ),
 }
@@ -403,3 +472,12 @@ def _coerce(value: str, value_type: str) -> Any:
         except (ValueError, TypeError):
             return 0
     return value
+
+
+def is_integration_enabled(name: str, db: Session) -> bool:
+    """Prüft ob eine Integration aktiviert ist.
+
+    Aktuell unterstützte Namen: 'thesslstore'.
+    """
+    svc = get_settings_service(db)
+    return svc.get_bool(f"{name}.enabled", default=False)

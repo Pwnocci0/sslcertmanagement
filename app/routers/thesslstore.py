@@ -6,10 +6,10 @@ from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
 
-from ..auth import login_required
+from ..auth import login_required, set_flash
 from ..database import get_db
 from .. import models
-from ..settings_service import get_settings_service
+from ..settings_service import get_settings_service, is_integration_enabled
 from ..services.thesslstore.service import TheSSLStoreService
 from ..services.thesslstore.exceptions import TheSSLStoreError
 
@@ -24,6 +24,16 @@ def _require_admin(request: Request, db: Session):
     if not user.is_admin:
         return RedirectResponse(url="/", status_code=302), None
     return None, user
+
+
+def _require_integration(request: Request, db: Session):
+    """Gibt None zurück wenn Integration aktiv, sonst einen Redirect."""
+    if not is_integration_enabled("thesslstore", db):
+        set_flash(request, "warning",
+                  "TheSSLStore-Integration ist deaktiviert. "
+                  "Bitte aktivieren Sie die Integration unter Einstellungen → Integrationen.")
+        return RedirectResponse(url="/settings/integrations", status_code=302)
+    return None
 
 
 def _get_service(db: Session) -> TheSSLStoreService:
@@ -41,6 +51,8 @@ async def index(
     redirect, user = _require_admin(request, db)
     if redirect:
         return redirect
+    if redir := _require_integration(request, db):
+        return redir
 
     tsvc = _get_service(db)
     products = tsvc.get_products()
@@ -69,6 +81,8 @@ async def sync_products(
     redirect, user = _require_admin(request, db)
     if redirect:
         return redirect
+    if redir := _require_integration(request, db):
+        return redir
 
     tsvc = _get_service(db)
     try:
