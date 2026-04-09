@@ -3,7 +3,6 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends, Form, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
-from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
 
 from .. import audit
@@ -12,7 +11,7 @@ from ..database import get_db
 from ..settings_service import DEFINITIONS, get_settings_service
 
 router = APIRouter(prefix="/mail-settings")
-templates = Jinja2Templates(directory="app/templates")
+from ..templates_config import templates
 
 _SMTP_KEYS = [k for k in DEFINITIONS if k.startswith("smtp.")]
 

@@ -7,15 +7,27 @@
     <h4 class="fw-bold mb-0"><i class="bi bi-globe2 me-2"></i>Domains</h4>
     <p class="text-muted small mb-0">{{ domains | length }} Einträge</p>
   </div>
-  <a href="/domains/new" class="btn btn-success btn-sm">
-    <i class="bi bi-plus-lg me-1"></i>Neue Domain
-  </a>
+  <div class="d-flex gap-2">
+    {% if archived_count > 0 or show_archived %}
+    <a href="/domains?{% if q %}q={{ q }}&{% endif %}{% if filter_customer_id %}customer_id={{ filter_customer_id }}&{% endif %}{% if not show_archived %}archived=1{% endif %}"
+       class="btn btn-sm {% if show_archived %}btn-warning{% else %}btn-outline-secondary{% endif %}">
+      <i class="bi bi-archive me-1"></i>
+      {% if show_archived %}Archiv ausblenden{% else %}Archiviert ({{ archived_count }}){% endif %}
+    </a>
+    {% endif %}
+    <a href="/domains/new" class="btn btn-success btn-sm">
+      <i class="bi bi-plus-lg me-1"></i>Neue Domain
+    </a>
+  </div>
 </div>
 
 <!-- Suche + Filter -->
 <div class="card border-0 shadow-sm mb-3">
   <div class="card-body py-2">
     <form method="get" action="/domains" class="row g-2 align-items-center">
+      {% if show_archived %}
+      <input type="hidden" name="archived" value="1">
+      {% endif %}
       <div class="col-sm-5">
         <div class="input-group input-group-sm">
           <span class="input-group-text bg-white border-end-0">
@@ -24,7 +36,7 @@
           <input type="text" name="q" class="form-control border-start-0 ps-0"
                  placeholder="Domain oder Kunde …" value="{{ q }}">
           {% if q %}
-          <a href="/domains{% if filter_customer_id %}?customer_id={{ filter_customer_id }}{% endif %}"
+          <a href="/domains{% if filter_customer_id %}?customer_id={{ filter_customer_id }}{% endif %}{% if show_archived %}{% if filter_customer_id %}&{% else %}?{% endif %}archived=1{% endif %}"
              class="btn btn-outline-secondary btn-sm">
             <i class="bi bi-x"></i>
           </a>
@@ -44,7 +56,7 @@
       <div class="col-auto">
         <button type="submit" class="btn btn-primary btn-sm">Filtern</button>
         {% if q or filter_customer_id %}
-        <a href="/domains" class="btn btn-outline-secondary btn-sm ms-1">
+        <a href="/domains{% if show_archived %}?archived=1{% endif %}" class="btn btn-outline-secondary btn-sm ms-1">
           <i class="bi bi-x-circle me-1"></i>Zurücksetzen
         </a>
         {% endif %}
@@ -71,11 +83,14 @@
         </thead>
         <tbody>
           {% for d in domains %}
-          <tr>
+          <tr {% if d.is_archived %}class="opacity-60"{% endif %}>
             <td>
               <a href="/domains/{{ d.id }}" class="text-decoration-none fw-semibold font-monospace">
                 {{ d.fqdn }}
               </a>
+              {% if d.is_archived %}
+                <span class="badge bg-secondary ms-1" style="font-size:.65rem;">Archiviert</span>
+              {% endif %}
             </td>
             <td>
               <a href="/customers/{{ d.customer_id }}" class="text-decoration-none text-muted">
@@ -98,9 +113,23 @@
               <a href="/domains/{{ d.id }}" class="btn btn-sm btn-outline-primary me-1" title="Details">
                 <i class="bi bi-eye"></i>
               </a>
-              <a href="/domains/{{ d.id }}/edit" class="btn btn-sm btn-outline-secondary" title="Bearbeiten">
+              {% if not d.is_archived %}
+              <a href="/domains/{{ d.id }}/edit" class="btn btn-sm btn-outline-secondary me-1" title="Bearbeiten">
                 <i class="bi bi-pencil"></i>
               </a>
+              <form method="post" action="/domains/{{ d.id }}/archive" class="d-inline"
+                    onsubmit="return confirm('Domain \'{{ d.fqdn }}\' archivieren?')">
+                <button class="btn btn-sm btn-outline-warning" title="Archivieren">
+                  <i class="bi bi-archive"></i>
+                </button>
+              </form>
+              {% else %}
+              <form method="post" action="/domains/{{ d.id }}/unarchive" class="d-inline">
+                <button class="btn btn-sm btn-outline-success" title="Wiederherstellen">
+                  <i class="bi bi-arrow-counterclockwise"></i>
+                </button>
+              </form>
+              {% endif %}
             </td>
           </tr>
           {% endfor %}
@@ -113,8 +142,10 @@
       {% if q or filter_customer_id %}
         Keine Domains gefunden.
         <div class="mt-2">
-          <a href="/domains" class="btn btn-sm btn-outline-secondary">Filter zurücksetzen</a>
+          <a href="/domains{% if show_archived %}?archived=1{% endif %}" class="btn btn-sm btn-outline-secondary">Filter zurücksetzen</a>
         </div>
+      {% elif show_archived %}
+        Keine archivierten Domains.
       {% else %}
         Noch keine Domains angelegt.
         <div class="mt-2">

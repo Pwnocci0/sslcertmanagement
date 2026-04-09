@@ -4,16 +4,16 @@
 {% block content %}
 <div class="row justify-content-center">
   <div class="col-md-5">
-    <div class="card shadow-sm border-warning">
-      <div class="card-header bg-warning text-dark">
-        <i class="bi bi-shield-lock-fill me-2"></i>
+    <div class="card shadow-sm">
+      <div class="card-header" style="background:rgba(217,119,6,0.08)!important;border-left:3px solid #d97706;">
+        <i class="bi bi-shield-lock-fill text-warning me-2"></i>
         <strong>Sicherheitsbestätigung erforderlich</strong>
       </div>
       <div class="card-body">
-        <p class="text-muted mb-3">
+        <p class="text-muted small mb-3">
           Die folgende Aktion erfordert eine erneute Authentifizierung:
         </p>
-        <div class="alert alert-secondary py-2 mb-4">
+        <div class="alert alert-warning py-2 mb-4">
           <i class="bi bi-key-fill me-1"></i> <strong>{{ action_label }}</strong>
         </div>
 

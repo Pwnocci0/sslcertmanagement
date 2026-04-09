@@ -5,12 +5,11 @@ import logging
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, Request
-from fastapi.responses import FileResponse, RedirectResponse
-from fastapi.templating import Jinja2Templates
+from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
 from sqlalchemy.orm import Session
 
 from .. import audit, models
-from ..auth import login_required
+from ..auth import forbidden_response, login_required
 from ..database import get_db
 from ..services.backup import (
     CustomerGroupBackupService,
@@ -20,7 +19,7 @@ from ..services.backup import (
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
-templates = Jinja2Templates(directory="app/templates")
+from ..templates_config import templates
 
 
 def _ip(r: Request) -> str:
@@ -29,6 +28,18 @@ def _ip(r: Request) -> str:
 
 def _flash(request: Request, msg: str, kind: str = "success") -> None:
     request.session["flash"] = {"msg": msg, "type": kind}
+
+
+def _user_in_group(user: models.User, group: models.CustomerGroup) -> bool:
+    """Gibt True zurück wenn der Benutzer Mitglied der Gruppe ist."""
+    return any(u.id == user.id for u in group.users)
+
+
+def _check_group_access(user: models.User, group: models.CustomerGroup) -> bool:
+    """Admin hat immer Zugriff; Techniker nur auf eigene Gruppen."""
+    if user.is_admin:
+        return True
+    return _user_in_group(user, group)
 
 
 # ── Globale Backups (Admin-only) ──────────────────────────────────────────────
@@ -127,13 +138,22 @@ def backup_download(backup_id: int, request: Request, db: Session = Depends(get_
     user = login_required(request, db)
     if not isinstance(user, models.User):
         return user
-    if not user.is_admin:
-        return RedirectResponse(url="/", status_code=302)
 
     backup = db.query(models.Backup).filter(models.Backup.id == backup_id).first()
     if not backup or not backup.archive_path:
         _flash(request, "Backup nicht gefunden.", "danger")
-        return RedirectResponse(url="/backups", status_code=302)
+        return RedirectResponse(url="/backups" if user.is_admin else "/customer-groups", status_code=302)
+
+    # Zugangsprüfung
+    if backup.backup_type == "global":
+        if not user.is_admin:
+            return forbidden_response()
+    else:
+        group = db.query(models.CustomerGroup).filter(
+            models.CustomerGroup.id == backup.customer_group_id
+        ).first()
+        if not group or not _check_group_access(user, group):
+            return forbidden_response()
 
     path = Path(backup.archive_path)
     if not path.exists():
@@ -150,17 +170,26 @@ def backup_delete(backup_id: int, request: Request, db: Session = Depends(get_db
     user = login_required(request, db)
     if not isinstance(user, models.User):
         return user
-    if not user.is_admin:
-        return RedirectResponse(url="/", status_code=302)
 
     backup = db.query(models.Backup).filter(models.Backup.id == backup_id).first()
     if not backup:
         _flash(request, "Backup nicht gefunden.", "danger")
-        return RedirectResponse(url="/backups", status_code=302)
+        return RedirectResponse(url="/backups" if user.is_admin else "/customer-groups", status_code=302)
 
     backup_type = backup.backup_type
     group_id = backup.customer_group_id
     label = backup.label
+
+    # Zugangsprüfung
+    if backup_type == "global":
+        if not user.is_admin:
+            return forbidden_response()
+    else:
+        group = db.query(models.CustomerGroup).filter(
+            models.CustomerGroup.id == group_id
+        ).first()
+        if not group or not _check_group_access(user, group):
+            return forbidden_response()
 
     try:
         if backup_type == "global":
@@ -189,14 +218,15 @@ def group_backup_list(group_id: int, request: Request, db: Session = Depends(get
     user = login_required(request, db)
     if not isinstance(user, models.User):
         return user
-    if not user.is_admin:
-        return RedirectResponse(url="/", status_code=302)
 
     group = db.query(models.CustomerGroup).filter(
         models.CustomerGroup.id == group_id
     ).first()
     if not group:
         return RedirectResponse(url="/customer-groups", status_code=302)
+
+    if not _check_group_access(user, group):
+        return forbidden_response()
 
     svc = CustomerGroupBackupService(db)
     backups = svc.list_backups_for_group(group_id)
@@ -220,14 +250,15 @@ def group_backup_create(group_id: int, request: Request, db: Session = Depends(g
     user = login_required(request, db)
     if not isinstance(user, models.User):
         return user
-    if not user.is_admin:
-        return RedirectResponse(url="/", status_code=302)
 
     group = db.query(models.CustomerGroup).filter(
         models.CustomerGroup.id == group_id
     ).first()
     if not group:
         return RedirectResponse(url="/customer-groups", status_code=302)
+
+    if not _check_group_access(user, group):
+        return forbidden_response()
 
     svc = CustomerGroupBackupService(db)
     try:
@@ -256,8 +287,6 @@ def group_backup_restore(backup_id: int, request: Request, db: Session = Depends
     user = login_required(request, db)
     if not isinstance(user, models.User):
         return user
-    if not user.is_admin:
-        return RedirectResponse(url="/", status_code=302)
 
     backup = db.query(models.Backup).filter(
         models.Backup.id == backup_id,
@@ -265,7 +294,15 @@ def group_backup_restore(backup_id: int, request: Request, db: Session = Depends
     ).first()
     if not backup:
         _flash(request, "Backup nicht gefunden.", "danger")
-        return RedirectResponse(url="/backups", status_code=302)
+        redirect_url = "/customer-groups" if not user.is_admin else "/backups"
+        return RedirectResponse(url=redirect_url, status_code=302)
+
+    # Zugangsprüfung: Techniker nur für eigene Gruppe
+    group = db.query(models.CustomerGroup).filter(
+        models.CustomerGroup.id == backup.customer_group_id
+    ).first()
+    if not group or not _check_group_access(user, group):
+        return forbidden_response()
 
     group_id = backup.customer_group_id
     svc = CustomerGroupBackupService(db)
@@ -274,7 +311,12 @@ def group_backup_restore(backup_id: int, request: Request, db: Session = Depends
         audit.log(
             db, "backup.group.restored", "backup",
             user_id=user.id, entity_id=backup.id,
-            details={"label": backup.label, "stats": stats},
+            details={
+                "label": backup.label,
+                "group_id": group_id,
+                "group_name": group.name if group else None,
+                "stats": stats,
+            },
             ip=_ip(request),
         )
         parts = []

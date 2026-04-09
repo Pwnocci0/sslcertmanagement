@@ -3,7 +3,6 @@ import re
 
 from fastapi import APIRouter, Depends, Form, Request
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
-from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
 
 from .. import audit, models
@@ -16,7 +15,7 @@ from ..database import get_db
 from ..stepup import require_stepup
 
 router = APIRouter(prefix="/csrs")
-templates = Jinja2Templates(directory="app/templates")
+from ..templates_config import templates
 
 # Erlaubte Key-Größen
 _VALID_KEY_SIZES = {2048, 3072, 4096}

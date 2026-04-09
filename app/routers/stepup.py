@@ -3,7 +3,6 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends, Form, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
-from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
 
 from .. import audit, mfa as mfa_module
@@ -12,7 +11,7 @@ from ..database import get_db
 from ..stepup import ACTIONS, grant_stepup
 
 router = APIRouter(prefix="/stepup")
-templates = Jinja2Templates(directory="app/templates")
+from ..templates_config import templates
 
 
 def _ip(request: Request) -> str:

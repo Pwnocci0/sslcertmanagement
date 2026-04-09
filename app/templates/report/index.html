@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% block title %}Problem melden – {{ app_name }}{% endblock %}
+
+{% block content %}
+<div class="d-flex align-items-center mb-4">
+  <h4 class="fw-bold mb-0"><i class="bi bi-flag me-2"></i>Problem melden</h4>
+</div>
+
+<div class="card border-0 shadow-sm" style="max-width:600px;">
+  <div class="card-body p-4">
+    <p class="text-muted small mb-3">
+      Beschreiben Sie das Problem so genau wie möglich. Der Bericht wird per E-Mail an den Support gesendet.
+    </p>
+
+    {% if error %}
+    <div class="alert alert-danger py-2 small">
+      <i class="bi bi-exclamation-triangle-fill me-1"></i>{{ error }}
+    </div>
+    {% endif %}
+    {% if flash %}
+    <div class="alert alert-{{ flash.type }} py-2 small">
+      {% if flash.type == 'success' %}<i class="bi bi-check-circle-fill me-1"></i>
+      {% elif flash.type == 'warning' %}<i class="bi bi-exclamation-triangle-fill me-1"></i>
+      {% endif %}{{ flash.msg }}
+    </div>
+    {% endif %}
+
+    <form method="post" action="/report" novalidate>
+      <div class="mb-3">
+        <label class="form-label fw-semibold" for="subject">Betreff <span class="text-danger">*</span></label>
+        <input type="text" id="subject" name="subject" class="form-control"
+               placeholder="Kurze Zusammenfassung des Problems" required autofocus maxlength="200">
+      </div>
+
+      <div class="mb-4">
+        <label class="form-label fw-semibold" for="body">Beschreibung <span class="text-danger">*</span></label>
+        <textarea id="body" name="body" class="form-control" rows="6" required
+                  placeholder="Was ist passiert? Welche Schritte haben zum Problem geführt? Was haben Sie erwartet?"></textarea>
+      </div>
+
+      <div class="d-flex gap-2">
+        <button type="submit" class="btn btn-primary">
+          <i class="bi bi-send me-1"></i>Absenden
+        </button>
+        <a href="/" class="btn btn-outline-secondary">Abbrechen</a>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}

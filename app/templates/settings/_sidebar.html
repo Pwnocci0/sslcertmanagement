@@ -5,6 +5,7 @@
       Einstellungen
     </div>
 
+    {% if user.is_admin %}
     <a href="/settings"
        class="list-group-item list-group-item-action py-2 {% if p == '/settings' %}active{% endif %}">
       <i class="bi bi-sliders me-2"></i>Allgemein &amp; Sicherheit
@@ -18,12 +19,14 @@
        class="list-group-item list-group-item-action py-2 {% if '/admin/users' in p %}active{% endif %}">
       <i class="bi bi-people me-2"></i>Benutzer
     </a>
+    {% endif %}
 
     <a href="/customer-groups"
        class="list-group-item list-group-item-action py-2 {% if p.startswith('/customer-groups') %}active{% endif %}">
       <i class="bi bi-collection me-2"></i>Kundengruppen
     </a>
 
+    {% if user.is_admin %}
     <div class="list-group-item list-group-item-light py-1 px-3 text-uppercase small fw-bold text-muted border-top" style="font-size:.7rem;letter-spacing:.06em">
       Benachrichtigungen
     </div>
@@ -71,5 +74,6 @@
        class="list-group-item list-group-item-action py-2 {% if p.startswith('/backups') %}active{% endif %}">
       <i class="bi bi-archive me-2"></i>Backups
     </a>
+    {% endif %}
   </div>
 </div>

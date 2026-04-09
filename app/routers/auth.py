@@ -1,6 +1,5 @@
 from fastapi import APIRouter, Depends, Form, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
-from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
 
 from ..auth import verify_password
@@ -8,7 +7,7 @@ from ..database import get_db
 from .. import models
 
 router = APIRouter()
-templates = Jinja2Templates(directory="app/templates")
+from ..templates_config import templates
 
 
 @router.get("/login", response_class=HTMLResponse)

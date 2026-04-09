@@ -8,7 +8,6 @@ from datetime import datetime
 
 from fastapi import APIRouter, Depends, Form, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
-from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
 
 from .. import models
@@ -26,7 +25,7 @@ from ..mfa import (
 )
 
 router = APIRouter(prefix="/mfa")
-templates = Jinja2Templates(directory="app/templates")
+from ..templates_config import templates
 
 
 def _get_pre_mfa_user(

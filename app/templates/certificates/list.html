@@ -22,7 +22,6 @@
             <th>Gültig bis</th>
             <th>Tage</th>
             <th>Status</th>
-            <th>Auto-Renew</th>
           </tr>
         </thead>
         <tbody>
@@ -45,13 +44,6 @@
               {% else %}–{% endif %}
             </td>
             <td><span class="badge bg-{{ cert.status_badge_class }}">{{ cert.status }}</span></td>
-            <td>
-              {% if cert.auto_renew %}
-                <i class="bi bi-check-circle-fill text-success"></i>
-              {% else %}
-                <i class="bi bi-x-circle text-muted"></i>
-              {% endif %}
-            </td>
           </tr>
           {% endfor %}
         </tbody>

@@ -3,7 +3,6 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends, Form, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
-from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
 
 from .. import audit, models
@@ -11,7 +10,7 @@ from ..auth import login_required, pop_flash, set_flash
 from ..database import get_db
 
 router = APIRouter(prefix="/csrtemplates")
-templates = Jinja2Templates(directory="app/templates")
+from ..templates_config import templates
 
 
 def _require_admin(request, db):

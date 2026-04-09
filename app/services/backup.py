@@ -14,12 +14,40 @@ from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
+from cryptography.fernet import Fernet
 from sqlalchemy.orm import Session
 
 from .. import models
 from ..database import DATABASE_URL
 
 logger = logging.getLogger(__name__)
+
+
+# ── Verschlüsselung ───────────────────────────────────────────────────────────
+
+def _fernet_from_password(password: str) -> Fernet:
+    """Leitet einen Fernet-Schlüssel aus dem Passwort via SHA-256 ab."""
+    key = hashlib.sha256(password.encode("utf-8")).digest()
+    return Fernet(base64.urlsafe_b64encode(key))
+
+
+def _encrypt_bytes(data: bytes, password: str) -> bytes:
+    return _fernet_from_password(password).encrypt(data)
+
+
+def _decrypt_bytes(data: bytes, password: str) -> bytes:
+    return _fernet_from_password(password).decrypt(data)
+
+
+def _get_encryption_password(db: Session) -> str | None:
+    """Gibt das Backup-Verschlüsselungspasswort aus den Einstellungen zurück."""
+    try:
+        from ..settings_service import get_settings_service
+        svc = get_settings_service(db)
+        pw = svc.get_str("backup.encryption_password", default="")
+        return pw if pw else None
+    except Exception:
+        return None
 
 # Backup-Verzeichnis relativ zum Projekt-Root
 _PROJECT_ROOT = Path(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
@@ -112,6 +140,14 @@ class GlobalBackupService:
                 tar.add(tmp_db, arcname="backup.db")
             tmp_db.unlink(missing_ok=True)
 
+            # Optionale Verschlüsselung
+            enc_password = _get_encryption_password(self.db)
+            encrypted = False
+            if enc_password:
+                raw = archive_path.read_bytes()
+                archive_path.write_bytes(_encrypt_bytes(raw, enc_password))
+                encrypted = True
+
             checksum = _sha256_file(archive_path)
             size_bytes = archive_path.stat().st_size
 
@@ -122,6 +158,7 @@ class GlobalBackupService:
                 "db_path": str(db_path),
                 "checksum": checksum,
                 "size_bytes": size_bytes,
+                "encrypted": encrypted,
             }
             (slot_dir / "manifest.json").write_text(json.dumps(meta, indent=2, ensure_ascii=False))
 
@@ -159,8 +196,26 @@ class GlobalBackupService:
         if db_path is None:
             raise ValueError("Nur SQLite-Datenbanken werden für globale Restores unterstützt.")
 
+        # Ggf. entschlüsseln
+        meta = {}
+        manifest_path = archive_path.parent / "manifest.json"
+        if manifest_path.exists():
+            try:
+                meta = json.loads(manifest_path.read_text())
+            except Exception:
+                pass
+        is_encrypted = meta.get("encrypted", False)
+
         with tempfile.TemporaryDirectory() as tmpdir:
-            with tarfile.open(archive_path, "r:gz") as tar:
+            raw_data = archive_path.read_bytes()
+            if is_encrypted:
+                enc_password = _get_encryption_password(self.db)
+                if not enc_password:
+                    raise ValueError("Backup ist verschlüsselt, aber kein Entschlüsselungspasswort konfiguriert.")
+                raw_data = _decrypt_bytes(raw_data, enc_password)
+            # tar.gz aus Bytes extrahieren
+            import io
+            with tarfile.open(fileobj=io.BytesIO(raw_data), mode="r:gz") as tar:
                 tar.extractall(tmpdir)
             extracted = Path(tmpdir) / "backup.db"
 
@@ -344,6 +399,14 @@ class CustomerGroupBackupService:
             with gzip.open(archive_path, "wt", encoding="utf-8") as fh:
                 json.dump(export, fh, ensure_ascii=False, indent=2)
 
+            # Optionale Verschlüsselung
+            enc_password = _get_encryption_password(self.db)
+            encrypted = False
+            if enc_password:
+                raw = archive_path.read_bytes()
+                archive_path.write_bytes(_encrypt_bytes(raw, enc_password))
+                encrypted = True
+
             checksum = _sha256_file(archive_path)
             size_bytes = archive_path.stat().st_size
 
@@ -356,6 +419,7 @@ class CustomerGroupBackupService:
                 "checksum": checksum,
                 "size_bytes": size_bytes,
                 "label": backup.label,
+                "encrypted": encrypted,
             }
             (slot_dir / "manifest.json").write_text(json.dumps(manifest, indent=2, ensure_ascii=False))
 
@@ -398,7 +462,25 @@ class CustomerGroupBackupService:
                 f"Erwartet: {backup.checksum}, erhalten: {actual}"
             )
 
-        with gzip.open(archive_path, "rt", encoding="utf-8") as fh:
+        # Ggf. entschlüsseln
+        cg_meta = {}
+        cg_manifest = archive_path.parent / "manifest.json"
+        if cg_manifest.exists():
+            try:
+                cg_meta = json.loads(cg_manifest.read_text())
+            except Exception:
+                pass
+        cg_encrypted = cg_meta.get("encrypted", False)
+
+        raw_gz = archive_path.read_bytes()
+        if cg_encrypted:
+            enc_password = _get_encryption_password(self.db)
+            if not enc_password:
+                raise ValueError("Backup ist verschlüsselt, aber kein Entschlüsselungspasswort konfiguriert.")
+            raw_gz = _decrypt_bytes(raw_gz, enc_password)
+
+        import io as _io
+        with gzip.open(_io.BytesIO(raw_gz), "rt", encoding="utf-8") as fh:
             export = json.load(fh)
 
         stats: dict[str, int] = {

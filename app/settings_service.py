@@ -62,6 +62,9 @@ CATEGORY_LABELS = {
     "maintenance":  "Wartung",
 }
 
+# Sichtbare Kategorien für Techniker (read-only; Admins sehen alle)
+TECHNICIAN_VISIBLE_CATEGORIES: set[str] = set()  # Techniker sehen keine Settings-Seite
+
 DEFINITIONS: dict[str, SettingDef] = {
     # ── Allgemein ─────────────────────────────────────────────────────────────
     "app.name": SettingDef(
@@ -69,6 +72,24 @@ DEFINITIONS: dict[str, SettingDef] = {
         value_type="string", category="general", is_sensitive=False,
         label="Anwendungsname",
         description="Wird in der Oberfläche und in MFA-QR-Codes verwendet.",
+    ),
+    "app.timezone": SettingDef(
+        default="Europe/Berlin",
+        value_type="string", category="general", is_sensitive=False,
+        label="Zeitzone",
+        description="IANA-Zeitzone für alle Zeitanzeigen (z. B. Europe/Berlin, UTC, America/New_York).",
+    ),
+    "app.favicon_path": SettingDef(
+        default="",
+        value_type="string", category="general", is_sensitive=False,
+        label="Favicon-Pfad",
+        description="Dateiname des Favicons unter /static/uploads/ (z. B. favicon.png).",
+    ),
+    "app.logo_path": SettingDef(
+        default="",
+        value_type="string", category="general", is_sensitive=False,
+        label="Logo-Pfad",
+        description="Dateiname des Logos unter /static/uploads/ (z. B. logo.png). Empfohlen: ca. 32 px Höhe, max. 200 px Breite, transparentes PNG.",
     ),
     "app.base_url": SettingDef(
         default="",
@@ -292,6 +313,16 @@ DEFINITIONS: dict[str, SettingDef] = {
     ),
 
     # ── Logs & Wartung ────────────────────────────────────────────────────────
+    "backup.encryption_password": SettingDef(
+        default="",
+        value_type="string", category="maintenance", is_sensitive=True,
+        label="Backup-Verschlüsselungspasswort",
+        description=(
+            "Passwort zur AES-256-Verschlüsselung von Backup-Archiven (Fernet/AES-128-CBC mit SHA-256-Ableitung). "
+            "Leer = Backups werden unverschlüsselt gespeichert. "
+            "Achtung: Bei Passwortänderung können vorherige Backups nicht mehr entschlüsselt werden."
+        ),
+    ),
     "logs.retention_days": SettingDef(
         default="365",
         value_type="int", category="maintenance", is_sensitive=False,

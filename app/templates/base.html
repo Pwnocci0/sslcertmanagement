@@ -3,7 +3,8 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>{% block title %}SSL Cert Management{% endblock %}</title>
+  <title>{% block title %}{{ app_name }}{% endblock %}</title>
+  {% if app_favicon %}<link rel="icon" href="/{{ app_favicon }}">{% endif %}
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap">
@@ -16,8 +17,13 @@
 {% if user %}
 <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
   <div class="container-fluid px-4">
-    <a class="navbar-brand fw-bold" href="/">
-      <i class="bi bi-shield-lock-fill text-success me-1"></i> SSL Manager
+    <a class="navbar-brand fw-bold d-flex align-items-center gap-2" href="/">
+      {% if app_logo %}
+        <img src="/{{ app_logo }}" alt="" height="28" class="rounded">
+      {% else %}
+        <i class="bi bi-shield-lock-fill text-success"></i>
+      {% endif %}
+      {{ app_name }}
     </a>
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navContent">
       <span class="navbar-toggler-icon"></span>
@@ -67,6 +73,13 @@
             <i class="bi bi-gear me-1"></i>Einstellungen
           </a>
         </li>
+        {% else %}
+        <li class="nav-item">
+          <a class="nav-link {% if request.url.path.startswith('/customer-groups') %}active{% endif %}"
+             href="/customer-groups">
+            <i class="bi bi-collection me-1"></i>Gruppen
+          </a>
+        </li>
         {% endif %}
         <li class="nav-item dropdown">
           <a class="nav-link dropdown-toggle" href="#" data-bs-toggle="dropdown">
@@ -74,6 +87,17 @@
           </a>
           <ul class="dropdown-menu dropdown-menu-end">
             <li><span class="dropdown-item-text text-muted small">{{ user.email }}</span></li>
+            <li><hr class="dropdown-divider"></li>
+            <li>
+              <a class="dropdown-item" href="/profile">
+                <i class="bi bi-person-gear me-1"></i>Mein Profil
+              </a>
+            </li>
+            <li>
+              <a class="dropdown-item" href="/report">
+                <i class="bi bi-flag me-1"></i>Problem melden
+              </a>
+            </li>
             <li><hr class="dropdown-divider"></li>
             <li>
               <a class="dropdown-item text-danger" href="/logout">

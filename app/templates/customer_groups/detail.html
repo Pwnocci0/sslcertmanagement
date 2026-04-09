@@ -107,8 +107,9 @@
   </div>
 </div>
 
-<!-- Backups -->
-{% if user.is_admin %}
+<!-- Backups: Admin oder Mitglied der Gruppe darf sehen -->
+{% set user_in_group = user.is_admin or (group.users | selectattr('id', 'equalto', user.id) | list | length > 0) %}
+{% if user_in_group %}
 <div class="card border-0 shadow-sm mt-4">
   <div class="card-header bg-transparent d-flex align-items-center">
     <i class="bi bi-archive me-1"></i>Backups

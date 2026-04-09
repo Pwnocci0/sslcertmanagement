@@ -11,7 +11,6 @@ from typing import Optional
 
 from fastapi import APIRouter, Depends, Form, Query, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
-from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
 
 from .. import audit, models
@@ -46,7 +45,7 @@ LOG_CATEGORIES = {
 LOG_LEVELS = ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]
 
 router = APIRouter(prefix="/admin")
-templates = Jinja2Templates(directory="app/templates")
+from ..templates_config import templates
 
 APP_VERSION = "1.0.0"
 

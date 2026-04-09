@@ -5,7 +5,6 @@ from datetime import datetime
 
 from fastapi import APIRouter, Depends, File, Form, Request, UploadFile
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
-from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
 
 from cryptography import x509
@@ -19,7 +18,7 @@ from ..crypto import parse_certificate_pem, split_pem_chain
 from ..database import get_db
 
 router = APIRouter(prefix="/certificates")
-templates = Jinja2Templates(directory="app/templates")
+from ..templates_config import templates
 
 
 def _client_ip(request: Request) -> str:
@@ -531,6 +530,7 @@ async def attachment_upload(
     cert_id: int,
     request: Request,
     file: UploadFile = File(...),
+    comment: str = Form(""),
     db: Session = Depends(get_db),
 ):
     user = login_required(request, db)
@@ -553,6 +553,7 @@ async def attachment_upload(
         content_type=file.content_type or "application/octet-stream",
         file_size=len(data),
         data=data,
+        comment=comment.strip() or None,
     )
     db.add(attachment)
     audit.log(db, "cert.attachment_uploaded", "certificate", user.id, entity_id=cert_id,

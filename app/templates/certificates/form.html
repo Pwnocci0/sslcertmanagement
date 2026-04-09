@@ -229,11 +229,6 @@ MIIFaz...
               {% endfor %}
             </select>
           </div>
-          <div class="form-check mb-3">
-            <input class="form-check-input" type="checkbox" name="auto_renew" id="f_auto_renew"
-                   {% if cert and cert.auto_renew %}checked{% endif %}>
-            <label class="form-check-label fw-semibold" for="f_auto_renew">Auto-Renew</label>
-          </div>
           <div>
             <label class="form-label fw-semibold" for="f_notes">Notizen</label>
             <textarea id="f_notes" name="notes" class="form-control" rows="2">{{ cert.notes or '' if cert else '' }}</textarea>

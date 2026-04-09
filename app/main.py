@@ -11,9 +11,10 @@ from .database import Base, engine
 from .routers import (
     admin, auth, backups, certificates, csrs, csrtemplates, customer_groups, customers,
     dashboard, domains, exports, mail_settings, mailtemplates, mfa, notifications,
-    settings, stepup, tasks, thesslstore,
+    profile, report, settings, stepup, tasks, thesslstore,
 )
 from .scheduler import shutdown_scheduler, start_scheduler
+from .templates_config import templates as _jinja_templates
 
 load_dotenv()
 
@@ -64,10 +65,28 @@ app.add_middleware(
 
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
+# Uploads-Verzeichnis sicherstellen
+os.makedirs("static/uploads", exist_ok=True)
+
 
 @app.on_event("startup")
 def on_startup():
     start_scheduler()
+    # Jinja2-Globals aus Einstellungen laden
+    try:
+        from .database import SessionLocal
+        from .settings_service import get_settings_service
+        db = SessionLocal()
+        try:
+            svc = get_settings_service(db)
+            _jinja_templates.env.globals["app_name"] = svc.get_str("app.name", "SSL Cert Management")
+            _jinja_templates.env.globals["app_timezone"] = svc.get_str("app.timezone", "Europe/Berlin")
+            _jinja_templates.env.globals["app_favicon"] = svc.get_str("app.favicon_path", "")
+            _jinja_templates.env.globals["app_logo"] = svc.get_str("app.logo_path", "")
+        finally:
+            db.close()
+    except Exception:
+        pass  # Fehler beim Laden der Einstellungen → Defaults bleiben
 
 
 @app.on_event("shutdown")
@@ -95,6 +114,8 @@ app.include_router(mail_settings.router)
 app.include_router(mailtemplates.router)
 app.include_router(notifications.router)
 app.include_router(backups.router)
+app.include_router(profile.router)
+app.include_router(report.router)
 
 # Tabellen beim Start anlegen (nur für SQLite-Dev, nicht für Produktions-Migrations-Workflow)
 Base.metadata.create_all(bind=engine)

@@ -8,7 +8,6 @@ from datetime import datetime
 
 from fastapi import APIRouter, Depends, Form, Request
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
-from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
 
 from .. import audit, mfa as mfa_module, models
@@ -21,7 +20,7 @@ from ..database import get_db
 from ..stepup import require_stepup
 
 router = APIRouter(prefix="/exports")
-templates = Jinja2Templates(directory="app/templates")
+from ..templates_config import templates
 
 
 def _ip(r): return r.headers.get("X-Forwarded-For", r.client.host if r.client else "unknown")

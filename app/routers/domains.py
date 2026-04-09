@@ -1,6 +1,5 @@
 from fastapi import APIRouter, Depends, Form, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
-from fastapi.templating import Jinja2Templates
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
@@ -9,10 +8,14 @@ from ..auth import (
     get_accessible_customer_ids, login_required, pop_flash, set_flash,
 )
 from ..database import get_db
-from .. import models
+from .. import audit, models
 
 router = APIRouter(prefix="/domains")
-templates = Jinja2Templates(directory="app/templates")
+from ..templates_config import templates
+
+
+def _client_ip(r: Request) -> str:
+    return r.headers.get("X-Forwarded-For", r.client.host if r.client else "unknown")
 
 
 def _accessible_customers(user, db: Session):
@@ -32,12 +35,15 @@ async def domain_list(request: Request, db: Session = Depends(get_db)):
 
     q = request.query_params.get("q", "").strip()
     filter_customer_id = request.query_params.get("customer_id", "")
+    show_archived = request.query_params.get("archived") == "1"
 
     accessible_ids = get_accessible_customer_ids(user, db)
 
     query = db.query(models.Domain).join(models.Customer)
     if accessible_ids is not None:
         query = query.filter(models.Domain.customer_id.in_(accessible_ids))
+    if not show_archived:
+        query = query.filter(models.Domain.is_archived == False)
     if q:
         query = query.filter(
             or_(
@@ -53,6 +59,12 @@ async def domain_list(request: Request, db: Session = Depends(get_db)):
     domains = query.order_by(models.Domain.fqdn).all()
     customers = _accessible_customers(user, db)
 
+    # Count archived for toggle button
+    archived_q = db.query(models.Domain)
+    if accessible_ids is not None:
+        archived_q = archived_q.filter(models.Domain.customer_id.in_(accessible_ids))
+    archived_count = archived_q.filter(models.Domain.is_archived == True).count()
+
     return templates.TemplateResponse(
         "domains/list.html",
         {
@@ -62,6 +74,8 @@ async def domain_list(request: Request, db: Session = Depends(get_db)):
             "customers": customers,
             "q": q,
             "filter_customer_id": filter_customer_id,
+            "show_archived": show_archived,
+            "archived_count": archived_count,
             "flash": pop_flash(request),
         },
     )
@@ -220,4 +234,46 @@ async def domain_update(
     domain.notes = notes.strip() or None
     db.commit()
     set_flash(request, "success", f'Domain "{domain.fqdn}" wurde gespeichert.')
+    return RedirectResponse(url=f"/domains/{domain_id}", status_code=302)
+
+
+@router.post("/{domain_id}/archive")
+async def domain_archive(domain_id: int, request: Request, db: Session = Depends(get_db)):
+    user = login_required(request, db)
+    if isinstance(user, RedirectResponse):
+        return user
+
+    domain = db.query(models.Domain).filter(models.Domain.id == domain_id).first()
+    if not domain:
+        return RedirectResponse(url="/domains", status_code=302)
+
+    if not check_customer_access(user, domain.customer_id, db):
+        return forbidden_response()
+
+    domain.is_archived = True
+    db.commit()
+    audit.log(db, "domain_archive", "domain", user_id=user.id, entity_id=domain.id,
+              details={"fqdn": domain.fqdn}, ip=_client_ip(request))
+    set_flash(request, "success", f'Domain "{domain.fqdn}" wurde archiviert.')
+    return RedirectResponse(url="/domains", status_code=302)
+
+
+@router.post("/{domain_id}/unarchive")
+async def domain_unarchive(domain_id: int, request: Request, db: Session = Depends(get_db)):
+    user = login_required(request, db)
+    if isinstance(user, RedirectResponse):
+        return user
+
+    domain = db.query(models.Domain).filter(models.Domain.id == domain_id).first()
+    if not domain:
+        return RedirectResponse(url="/domains", status_code=302)
+
+    if not check_customer_access(user, domain.customer_id, db):
+        return forbidden_response()
+
+    domain.is_archived = False
+    db.commit()
+    audit.log(db, "domain_unarchive", "domain", user_id=user.id, entity_id=domain.id,
+              details={"fqdn": domain.fqdn}, ip=_client_ip(request))
+    set_flash(request, "success", f'Domain "{domain.fqdn}" wurde wiederhergestellt.')
     return RedirectResponse(url=f"/domains/{domain_id}", status_code=302)

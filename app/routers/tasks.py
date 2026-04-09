@@ -5,7 +5,6 @@ from datetime import datetime, timedelta
 
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
-from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
 
 from ..auth import get_accessible_customer_ids, login_required, pop_flash
@@ -13,7 +12,7 @@ from ..database import get_db
 from .. import models
 
 router = APIRouter(prefix="/tasks")
-templates = Jinja2Templates(directory="app/templates")
+from ..templates_config import templates
 
 # Ablauf-Schwellen
 _THRESHOLDS = [7, 14, 30, 60, 90]

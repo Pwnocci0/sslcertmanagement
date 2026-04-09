@@ -5,7 +5,6 @@ from datetime import datetime
 
 from fastapi import APIRouter, Depends, Form, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
-from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
 
 from .. import audit, models
@@ -14,7 +13,7 @@ from ..database import get_db
 from ..services.notification import TEMPLATE_KEYS, TEMPLATE_PLACEHOLDERS
 
 router = APIRouter(prefix="/mailtemplates")
-templates = Jinja2Templates(directory="app/templates")
+from ..templates_config import templates
 
 
 def _require_admin(request: Request, db: Session):

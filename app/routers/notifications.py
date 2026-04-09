@@ -3,7 +3,6 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
-from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
 
 from .. import models
@@ -12,7 +11,7 @@ from ..database import get_db
 from ..services.notification import NOTIFICATION_SEVERITIES, NOTIFICATION_TYPES
 
 router = APIRouter(prefix="/notifications")
-templates = Jinja2Templates(directory="app/templates")
+from ..templates_config import templates
 
 
 def _require_admin(request: Request, db: Session):

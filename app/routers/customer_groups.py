@@ -5,16 +5,15 @@ import json
 
 from fastapi import APIRouter, Depends, Form, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
-from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
 
 from .. import audit, models
-from ..auth import login_required, pop_flash, set_flash
+from ..auth import forbidden_response, get_accessible_customer_ids, login_required, pop_flash, set_flash
 from ..database import get_db
 from ..services.notification import NOTIFICATION_SEVERITIES, NOTIFICATION_TYPES
 
 router = APIRouter(prefix="/customer-groups")
-templates = Jinja2Templates(directory="app/templates")
+from ..templates_config import templates
 
 
 def _ip(r: Request) -> str:
@@ -30,15 +29,51 @@ def _require_admin(request: Request, db: Session):
     return None, user
 
 
+def _login(request: Request, db: Session):
+    """Login required (any role)."""
+    user = login_required(request, db)
+    if isinstance(user, RedirectResponse):
+        return user, None
+    return None, user
+
+
+def _accessible_customers(user: models.User, db: Session) -> list[models.Customer]:
+    """Gibt nur aktive Kunden zurück, auf die der Benutzer Zugriff hat.
+
+    Admins sehen alle. Techniker nur Kunden aus ihren Gruppen.
+    """
+    q = db.query(models.Customer).filter(models.Customer.is_archived == False)
+    ids = get_accessible_customer_ids(user, db)
+    if ids is not None:
+        q = q.filter(models.Customer.id.in_(ids))
+    return q.order_by(models.Customer.name).all()
+
+
+def _filter_allowed_customer_ids(submitted_ids: list[int], user: models.User, db: Session) -> list[int]:
+    """Filtert eine Liste von Kunden-IDs auf die tatsächlich erlaubten.
+
+    Gibt nur IDs zurück, auf die der Benutzer Zugriff hat.
+    Für Admins werden alle IDs durchgelassen.
+    """
+    if user.is_admin:
+        return submitted_ids
+    allowed = set(get_accessible_customer_ids(user, db) or [])
+    return [cid for cid in submitted_ids if cid in allowed]
+
+
 # ── Liste ─────────────────────────────────────────────────────────────────────
 
 @router.get("", response_class=HTMLResponse)
 async def group_list(request: Request, db: Session = Depends(get_db)):
-    redir, user = _require_admin(request, db)
+    redir, user = _login(request, db)
     if redir:
         return redir
 
-    groups = db.query(models.CustomerGroup).order_by(models.CustomerGroup.name).all()
+    q = db.query(models.CustomerGroup).order_by(models.CustomerGroup.name)
+    if not user.is_admin:
+        # Technicians see only their own groups
+        q = q.filter(models.CustomerGroup.users.any(models.User.id == user.id))
+    groups = q.all()
     return templates.TemplateResponse(
         "customer_groups/list.html",
         {"request": request, "user": user, "groups": groups, "flash": pop_flash(request)},
@@ -49,28 +84,23 @@ async def group_list(request: Request, db: Session = Depends(get_db)):
 
 @router.get("/new", response_class=HTMLResponse)
 async def group_new(request: Request, db: Session = Depends(get_db)):
-    redir, user = _require_admin(request, db)
+    redir, user = _login(request, db)
     if redir:
         return redir
 
-    all_customers = (
-        db.query(models.Customer)
-        .filter(models.Customer.is_archived == False)
-        .order_by(models.Customer.name)
-        .all()
-    )
+    all_customers = _accessible_customers(user, db)
     technicians = (
         db.query(models.User)
         .filter(models.User.is_active == True, models.User.is_admin == False)
         .order_by(models.User.username)
         .all()
-    )
+    ) if user.is_admin else []
     return templates.TemplateResponse(
         "customer_groups/form.html",
         {
             "request": request, "user": user, "group": None,
             "all_customers": all_customers, "technicians": technicians,
-            "selected_customer_ids": [], "selected_user_ids": [],
+            "selected_customer_ids": [], "selected_user_ids": [user.id] if not user.is_admin else [],
             "notification_types": NOTIFICATION_TYPES,
             "notification_severities": NOTIFICATION_SEVERITIES,
             "selected_types": list(NOTIFICATION_TYPES.keys()),
@@ -93,61 +123,48 @@ async def group_create(
     notification_severity_ids: list[str] = Form(default=[]),
     db: Session = Depends(get_db),
 ):
-    redir, user = _require_admin(request, db)
+    redir, user = _login(request, db)
     if redir:
         return redir
 
+    # ── Kunden-IDs serverseitig auf erlaubte einschränken ─────────────────────
+    # Nicht-erlaubte IDs werden stillschweigend ignoriert; ein manipulierter
+    # Request kann dadurch keine fremden Kunden zuweisen.
+    allowed_customer_ids = _filter_allowed_customer_ids(customer_ids, user, db)
+    rejected = set(customer_ids) - set(allowed_customer_ids)
+    if rejected:
+        audit.log(db, "customer_group.unauthorized_customer_attempt", "customer_group",
+                  user.id, details={"rejected_ids": sorted(rejected)}, ip=_ip(request))
+
     name = name.strip()
-    if not name:
-        all_customers = (
-            db.query(models.Customer).filter(models.Customer.is_archived == False)
-            .order_by(models.Customer.name).all()
-        )
-        technicians = (
-            db.query(models.User)
-            .filter(models.User.is_active == True, models.User.is_admin == False)
-            .order_by(models.User.username).all()
-        )
+
+    def _form_ctx(error: str, status: int = 422):
         return templates.TemplateResponse(
             "customer_groups/form.html",
             {
                 "request": request, "user": user, "group": None,
-                "all_customers": all_customers, "technicians": technicians,
-                "selected_customer_ids": customer_ids, "selected_user_ids": user_ids,
+                "all_customers": _accessible_customers(user, db),
+                "technicians": (
+                    db.query(models.User)
+                    .filter(models.User.is_active == True, models.User.is_admin == False)
+                    .order_by(models.User.username).all()
+                ) if user.is_admin else [],
+                "selected_customer_ids": allowed_customer_ids,
+                "selected_user_ids": user_ids if user.is_admin else [user.id],
                 "notification_types": NOTIFICATION_TYPES,
                 "notification_severities": NOTIFICATION_SEVERITIES,
                 "selected_types": notification_type_ids,
                 "selected_severities": notification_severity_ids,
-                "error": "Name darf nicht leer sein.", "flash": None,
+                "error": error, "flash": None,
             },
-            status_code=422,
+            status_code=status,
         )
 
-    existing = db.query(models.CustomerGroup).filter(models.CustomerGroup.name == name).first()
-    if existing:
-        all_customers = (
-            db.query(models.Customer).filter(models.Customer.is_archived == False)
-            .order_by(models.Customer.name).all()
-        )
-        technicians = (
-            db.query(models.User)
-            .filter(models.User.is_active == True, models.User.is_admin == False)
-            .order_by(models.User.username).all()
-        )
-        return templates.TemplateResponse(
-            "customer_groups/form.html",
-            {
-                "request": request, "user": user, "group": None,
-                "all_customers": all_customers, "technicians": technicians,
-                "selected_customer_ids": customer_ids, "selected_user_ids": user_ids,
-                "notification_types": NOTIFICATION_TYPES,
-                "notification_severities": NOTIFICATION_SEVERITIES,
-                "selected_types": notification_type_ids,
-                "selected_severities": notification_severity_ids,
-                "error": f'Gruppe "{name}" existiert bereits.', "flash": None,
-            },
-            status_code=422,
-        )
+    if not name:
+        return _form_ctx("Name darf nicht leer sein.")
+
+    if db.query(models.CustomerGroup).filter(models.CustomerGroup.name == name).first():
+        return _form_ctx(f'Gruppe "{name}" existiert bereits.')
 
     group = models.CustomerGroup(
         name=name,
@@ -158,18 +175,22 @@ async def group_create(
         notification_severities=json.dumps(notification_severity_ids) if notification_severity_ids else None,
     )
 
-    # Kunden zuordnen
-    if customer_ids:
-        customers = db.query(models.Customer).filter(models.Customer.id.in_(customer_ids)).all()
-        group.customers = customers
-
-    # Techniker zuordnen (nur Nicht-Admins)
-    if user_ids:
-        techs = db.query(models.User).filter(
-            models.User.id.in_(user_ids),
-            models.User.is_admin == False,
+    # Kunden zuordnen — nur erlaubte IDs
+    if allowed_customer_ids:
+        group.customers = db.query(models.Customer).filter(
+            models.Customer.id.in_(allowed_customer_ids)
         ).all()
-        group.users = techs
+
+    # Techniker zuordnen
+    if user.is_admin:
+        if user_ids:
+            group.users = db.query(models.User).filter(
+                models.User.id.in_(user_ids),
+                models.User.is_admin == False,
+            ).all()
+    else:
+        # Techniker wird automatisch der eigenen neuen Gruppe zugeordnet
+        group.users = [user]
 
     db.add(group)
     db.flush()
@@ -193,7 +214,7 @@ async def group_create(
 
 @router.get("/{group_id}", response_class=HTMLResponse)
 async def group_detail(group_id: int, request: Request, db: Session = Depends(get_db)):
-    redir, user = _require_admin(request, db)
+    redir, user = _login(request, db)
     if redir:
         return redir
 
@@ -201,6 +222,11 @@ async def group_detail(group_id: int, request: Request, db: Session = Depends(ge
     if not group:
         set_flash(request, "warning", "Kundengruppe nicht gefunden.")
         return RedirectResponse(url="/customer-groups", status_code=302)
+
+    # Technicians can only view groups they belong to
+    if not user.is_admin and user not in group.users:
+        from ..auth import forbidden_response
+        return forbidden_response()
 
     recent_backups = (
         db.query(models.Backup)
@@ -237,12 +263,7 @@ async def group_edit(group_id: int, request: Request, db: Session = Depends(get_
     if not group:
         return RedirectResponse(url="/customer-groups", status_code=302)
 
-    all_customers = (
-        db.query(models.Customer)
-        .filter(models.Customer.is_archived == False)
-        .order_by(models.Customer.name)
-        .all()
-    )
+    all_customers = _accessible_customers(user, db)
     technicians = (
         db.query(models.User)
         .filter(models.User.is_active == True, models.User.is_admin == False)
@@ -294,23 +315,27 @@ async def group_update(
     if not group:
         return RedirectResponse(url="/customer-groups", status_code=302)
 
+    # Kunden-IDs serverseitig filtern (defensiv — gilt auch für Admins korrekt)
+    allowed_customer_ids = _filter_allowed_customer_ids(customer_ids, user, db)
+    rejected = set(customer_ids) - set(allowed_customer_ids)
+    if rejected:
+        audit.log(db, "customer_group.unauthorized_customer_attempt", "customer_group",
+                  user.id, entity_id=group_id,
+                  details={"rejected_ids": sorted(rejected)}, ip=_ip(request))
+
     name = name.strip()
     if not name:
-        all_customers = (
-            db.query(models.Customer).filter(models.Customer.is_archived == False)
-            .order_by(models.Customer.name).all()
-        )
-        technicians = (
-            db.query(models.User)
-            .filter(models.User.is_active == True, models.User.is_admin == False)
-            .order_by(models.User.username).all()
-        )
         return templates.TemplateResponse(
             "customer_groups/form.html",
             {
                 "request": request, "user": user, "group": group,
-                "all_customers": all_customers, "technicians": technicians,
-                "selected_customer_ids": customer_ids, "selected_user_ids": user_ids,
+                "all_customers": _accessible_customers(user, db),
+                "technicians": (
+                    db.query(models.User)
+                    .filter(models.User.is_active == True, models.User.is_admin == False)
+                    .order_by(models.User.username).all()
+                ),
+                "selected_customer_ids": allowed_customer_ids, "selected_user_ids": user_ids,
                 "notification_types": NOTIFICATION_TYPES,
                 "notification_severities": NOTIFICATION_SEVERITIES,
                 "selected_types": notification_type_ids,
@@ -328,10 +353,10 @@ async def group_update(
     group.notification_types = json.dumps(notification_type_ids) if notification_type_ids else None
     group.notification_severities = json.dumps(notification_severity_ids) if notification_severity_ids else None
 
-    # Kunden-Zuordnung aktualisieren
-    if customer_ids:
+    # Kunden-Zuordnung aktualisieren — nur erlaubte IDs
+    if allowed_customer_ids:
         group.customers = db.query(models.Customer).filter(
-            models.Customer.id.in_(customer_ids)
+            models.Customer.id.in_(allowed_customer_ids)
         ).all()
     else:
         group.customers = []

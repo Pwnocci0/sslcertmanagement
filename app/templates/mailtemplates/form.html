@@ -26,8 +26,8 @@
     <div class="d-flex flex-wrap gap-1">
       {% for key, label in placeholders %}
       <button type="button" class="btn btn-sm btn-outline-secondary placeholder-btn"
-              data-placeholder="{{{{" + key + "}}}}" title="{{ label }}">
-        <code>{{{{ {{ key }} }}}}</code>
+              data-placeholder="{{ '{{' }}{{ key }}{{ '}}' }}" title="{{ label }}">
+        <code>{{ '{{' }}{{ key }}{{ '}}' }}</code>
       </button>
       {% endfor %}
     </div>

@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}Einstellungen – SSL Manager{% endblock %}
+{% block title %}Einstellungen – {{ app_name }}{% endblock %}
 
 {% block content %}
 <div class="row g-4">
@@ -14,7 +14,10 @@
 
     {% if flash %}
     <div class="alert alert-{{ flash.type }} alert-dismissible fade show" role="alert">
-      {% if flash.type == 'success' %}<i class="bi bi-check-circle-fill me-2"></i>{% endif %}
+      {% if flash.type == 'success' %}<i class="bi bi-check-circle-fill me-2"></i>
+      {% elif flash.type == 'danger' %}<i class="bi bi-x-circle-fill me-2"></i>
+      {% elif flash.type == 'warning' %}<i class="bi bi-exclamation-triangle-fill me-2"></i>
+      {% else %}<i class="bi bi-info-circle-fill me-2"></i>{% endif %}
       {{ flash.msg }}
       <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
     </div>
@@ -49,6 +52,7 @@
           <div class="card shadow-sm">
             <div class="card-body">
               {% for setting in items %}
+              {% if setting.key not in upload_managed_keys %}
               <div class="row mb-3 align-items-start">
                 <label class="col-sm-4 col-form-label fw-semibold" for="s_{{ setting.key }}">
                   {{ setting.label }}
@@ -84,6 +88,7 @@
                   {% endif %}
                 </div>
               </div>
+              {% endif %}
               {% endfor %}
             </div>
           </div>
@@ -97,6 +102,99 @@
         </button>
       </div>
     </form>
+
+    <!-- ── Branding-Uploads ───────────────────────────────────────────────── -->
+    <hr class="my-4">
+    <h5 class="fw-semibold mb-3"><i class="bi bi-palette me-2 text-secondary"></i>Branding</h5>
+
+    <div class="row g-3">
+
+      <!-- Favicon -->
+      <div class="col-md-6">
+        <div class="card border-0 shadow-sm h-100">
+          <div class="card-header bg-white fw-semibold border-bottom">
+            <i class="bi bi-image me-1 text-secondary"></i>Favicon
+          </div>
+          <div class="card-body">
+            <p class="text-muted small mb-3">
+              Empfohlen: 32×32 px oder 48×48 px, PNG oder ICO. Max. 2 MB.
+            </p>
+
+            {% if favicon_path %}
+            <div class="d-flex align-items-center gap-3 mb-3 p-2 border rounded">
+              <img src="/{{ favicon_path }}" alt="Favicon" height="32" class="rounded">
+              <div class="flex-grow-1 small text-muted font-monospace text-truncate">
+                {{ favicon_path.split('/')[-1] }}
+              </div>
+              <form method="post" action="/settings/upload-favicon/remove" class="flex-shrink-0"
+                    onsubmit="return confirm('Favicon entfernen?')">
+                <button class="btn btn-sm btn-outline-danger" title="Entfernen">
+                  <i class="bi bi-trash"></i>
+                </button>
+              </form>
+            </div>
+            {% else %}
+            <p class="text-muted small fst-italic mb-3">Kein Favicon gesetzt – Standardverhalten des Browsers.</p>
+            {% endif %}
+
+            <form method="post" action="/settings/upload-favicon" enctype="multipart/form-data">
+              <div class="d-flex gap-2 align-items-center flex-wrap">
+                <input type="file" name="favicon" class="form-control form-control-sm"
+                       accept=".ico,.png,.svg" style="max-width:260px;" required>
+                <button type="submit" class="btn btn-sm btn-outline-primary">
+                  <i class="bi bi-upload me-1"></i>{% if favicon_path %}Ersetzen{% else %}Hochladen{% endif %}
+                </button>
+              </div>
+              <div class="form-text text-muted mt-1">Erlaubt: .ico, .png, .svg</div>
+            </form>
+          </div>
+        </div>
+      </div>
+
+      <!-- Site-Logo -->
+      <div class="col-md-6">
+        <div class="card border-0 shadow-sm h-100">
+          <div class="card-header bg-white fw-semibold border-bottom">
+            <i class="bi bi-image-fill me-1 text-secondary"></i>Site-Logo (Navbar)
+          </div>
+          <div class="card-body">
+            <p class="text-muted small mb-3">
+              Empfohlen: ca. 32 px Höhe, max. 160–200 px Breite, transparentes PNG. Max. 2 MB.
+            </p>
+
+            {% if logo_path %}
+            <div class="d-flex align-items-center gap-3 mb-3 p-2 border rounded"
+                 style="background: #1e2235;">
+              <img src="/{{ logo_path }}" alt="Logo" height="32" class="rounded">
+              <div class="flex-grow-1 small text-white-50 font-monospace text-truncate">
+                {{ logo_path.split('/')[-1] }}
+              </div>
+              <form method="post" action="/settings/upload-logo/remove" class="flex-shrink-0"
+                    onsubmit="return confirm('Logo entfernen?')">
+                <button class="btn btn-sm btn-outline-danger" title="Entfernen">
+                  <i class="bi bi-trash"></i>
+                </button>
+              </form>
+            </div>
+            {% else %}
+            <p class="text-muted small fst-italic mb-3">Kein Logo – Anwendungsname wird in der Navbar angezeigt.</p>
+            {% endif %}
+
+            <form method="post" action="/settings/upload-logo" enctype="multipart/form-data">
+              <div class="d-flex gap-2 align-items-center flex-wrap">
+                <input type="file" name="logo" class="form-control form-control-sm"
+                       accept=".png,.svg,.jpg,.jpeg" style="max-width:260px;" required>
+                <button type="submit" class="btn btn-sm btn-outline-primary">
+                  <i class="bi bi-upload me-1"></i>{% if logo_path %}Ersetzen{% else %}Hochladen{% endif %}
+                </button>
+              </div>
+              <div class="form-text text-muted mt-1">Erlaubt: .png, .svg, .jpg</div>
+            </form>
+          </div>
+        </div>
+      </div>
+
+    </div><!-- /row -->
 
   </div>
 </div>

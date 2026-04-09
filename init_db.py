@@ -478,6 +478,26 @@ def run_migrations():
             conn.commit()
         print("Migration: Tabelle 'thesslstore_orders' angelegt.")
 
+    # domains.is_archived
+    if "domains" in inspector.get_table_names():
+        existing_cols = [c["name"] for c in inspector.get_columns("domains")]
+        if "is_archived" not in existing_cols:
+            with engine.connect() as conn:
+                conn.execute(text(
+                    "ALTER TABLE domains ADD COLUMN is_archived BOOLEAN NOT NULL DEFAULT 0"
+                ))
+                conn.commit()
+            print("Migration: Spalte 'is_archived' zu 'domains' hinzugefügt.")
+
+    # certificate_attachments.comment
+    if "certificate_attachments" in inspector.get_table_names():
+        existing_cols = [c["name"] for c in inspector.get_columns("certificate_attachments")]
+        if "comment" not in existing_cols:
+            with engine.connect() as conn:
+                conn.execute(text("ALTER TABLE certificate_attachments ADD COLUMN comment TEXT"))
+                conn.commit()
+            print("Migration: Spalte 'comment' zu 'certificate_attachments' hinzugefügt.")
+
     # backups
     if "backups" not in inspector.get_table_names():
         with engine.connect() as conn:

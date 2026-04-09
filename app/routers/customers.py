@@ -1,6 +1,5 @@
 from fastapi import APIRouter, Depends, Form, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
-from fastapi.templating import Jinja2Templates
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
@@ -12,7 +11,7 @@ from ..database import get_db
 from .. import models
 
 router = APIRouter(prefix="/customers")
-templates = Jinja2Templates(directory="app/templates")
+from ..templates_config import templates
 
 
 @router.get("", response_class=HTMLResponse)
@@ -69,12 +68,18 @@ async def customer_new(request: Request, db: Session = Depends(get_db)):
     if isinstance(user, RedirectResponse):
         return user
 
+    # Technicians can create customers but must assign a group
+    available_groups = None
     if not user.is_admin:
-        return forbidden_response("Neue Kunden können nur von Administratoren angelegt werden.")
+        available_groups = user.customer_groups  # only their own groups
+        if not available_groups:
+            set_flash(request, "danger", "Sie sind keiner Kundengruppe zugewiesen. Bitte einen Administrator kontaktieren.")
+            return RedirectResponse(url="/customers", status_code=302)
 
     return templates.TemplateResponse(
         "customers/form.html",
-        {"request": request, "user": user, "customer": None, "error": None, "flash": pop_flash(request)},
+        {"request": request, "user": user, "customer": None, "error": None,
+         "flash": pop_flash(request), "available_groups": available_groups},
     )
 
 
@@ -85,20 +90,38 @@ async def customer_create(
     contact_name: str = Form(""),
     contact_email: str = Form(""),
     notes: str = Form(""),
+    group_id: str = Form(""),
     db: Session = Depends(get_db),
 ):
     user = login_required(request, db)
     if isinstance(user, RedirectResponse):
         return user
 
+    available_groups = None if user.is_admin else user.customer_groups
+
+    # Technicians must select one of their groups
+    selected_group = None
     if not user.is_admin:
-        return forbidden_response("Neue Kunden können nur von Administratoren angelegt werden.")
+        if not group_id.isdigit():
+            return templates.TemplateResponse(
+                "customers/form.html",
+                {"request": request, "user": user, "customer": None,
+                 "error": "Bitte eine Kundengruppe auswählen.", "flash": None,
+                 "available_groups": available_groups},
+                status_code=422,
+            )
+        gid = int(group_id)
+        allowed_ids = [g.id for g in user.customer_groups]
+        if gid not in allowed_ids:
+            return forbidden_response()
+        selected_group = db.query(models.CustomerGroup).filter(models.CustomerGroup.id == gid).first()
 
     name = name.strip()
     if not name:
         return templates.TemplateResponse(
             "customers/form.html",
-            {"request": request, "user": user, "customer": None, "error": "Name darf nicht leer sein.", "flash": None},
+            {"request": request, "user": user, "customer": None, "error": "Name darf nicht leer sein.", "flash": None,
+             "available_groups": available_groups},
             status_code=422,
         )
 
@@ -109,6 +132,9 @@ async def customer_create(
         notes=notes.strip() or None,
     )
     db.add(customer)
+    db.flush()  # get customer.id before commit
+    if selected_group:
+        selected_group.customers.append(customer)
     db.commit()
     set_flash(request, "success", f'Kunde "{customer.name}" wurde angelegt.')
     return RedirectResponse(url=f"/customers/{customer.id}", status_code=302)

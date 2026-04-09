@@ -126,6 +126,7 @@ class Domain(Base):
     customer_id = Column(Integer, ForeignKey("customers.id"), nullable=False)
     fqdn = Column(String(255), nullable=False, index=True)
     notes = Column(Text)
+    is_archived = Column(Boolean, default=False, nullable=False)
     created_at = Column(DateTime, default=func.now(), nullable=False)
 
     customer = relationship("Customer", back_populates="domains")
@@ -384,6 +385,7 @@ class CertificateAttachment(Base):
     content_type = Column(String(100), nullable=False, default="application/octet-stream")
     file_size = Column(Integer, nullable=False)
     data = Column(LargeBinary, nullable=False)
+    comment = Column(Text, nullable=True)
     created_at = Column(DateTime, default=func.now(), nullable=False)
 
     certificate = relationship("Certificate", back_populates="attachments")

@@ -364,6 +364,11 @@ thead.table-light th {
   border-color: rgba(255,255,255,0.08);
 }
 
+/* table-sm: keep decent padding, just tighter than default */
+.table-sm > :not(caption) > * > * {
+  padding: 0.55rem 1rem;
+}
+
 /* Last row: no border at bottom of card */
 .card-body.p-0 .table tbody tr:last-child td {
   border-bottom: none;
@@ -467,6 +472,19 @@ thead.table-light th {
 
 .input-group .form-control { box-shadow: none; }
 
+/* Input group prefix icons */
+.input-group-text {
+  background-color: #f9fafb;
+  border-color: var(--clr-border);
+  color: var(--clr-text-muted);
+  font-size: var(--fs-sm);
+}
+
+/* Seamless icon+input combos (bg-white border-end-0 pattern) */
+.input-group-text.bg-white {
+  background-color: #fff !important;
+}
+
 
 /* ── Badges ───────────────────────────────────────────────────────────────── */
 
@@ -480,11 +498,15 @@ thead.table-light th {
 }
 
 /* Status badge colors – cleaner, more contrast */
-.badge.bg-success  { background-color: #16a34a !important; }
-.badge.bg-danger   { background-color: #dc2626 !important; }
-.badge.bg-warning  { background-color: #d97706 !important; }
-.badge.bg-secondary { background-color: #6b7280 !important; }
-.badge.bg-dark     { background-color: #374151 !important; }
+.badge.bg-success  { background-color: #16a34a !important; color: #fff; }
+.badge.bg-danger   { background-color: #dc2626 !important; color: #fff; }
+.badge.bg-warning  { background-color: #d97706 !important; color: #fff; }
+.badge.bg-info     { background-color: #0284c7 !important; color: #fff; }
+.badge.bg-secondary { background-color: #6b7280 !important; color: #fff; }
+.badge.bg-dark     { background-color: #374151 !important; color: #fff; }
+
+/* Explicit text-dark override for warning badges (keeps them readable) */
+.badge.bg-warning.text-dark { color: #1c1917 !important; }
 
 /* Subtle variant badges */
 .badge.bg-success-subtle {
@@ -650,6 +672,88 @@ pre {
 ::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.15); border-radius: 3px; }
 ::-webkit-scrollbar-thumb:hover { background: rgba(0,0,0,0.25); }
 
+
+/* ── Filter / search bar cards ───────────────────────────────────────────── */
+/* Cards used as horizontal filter containers (small card-body inside) */
+
+.card-body.py-2,
+.card-body.pb-2 {
+  padding-left: 1.25rem !important;
+  padding-right: 1.25rem !important;
+}
+
+/* ── Breadcrumb ───────────────────────────────────────────────────────────── */
+
+.breadcrumb {
+  font-size: var(--fs-xs);
+  color: var(--clr-text-muted);
+  margin-bottom: 0;
+  gap: 0.25rem;
+}
+
+.breadcrumb-item + .breadcrumb-item::before { color: var(--clr-text-light); }
+
+.breadcrumb-item a {
+  color: var(--clr-text-muted);
+  text-decoration: none;
+  transition: color 0.15s;
+}
+
+.breadcrumb-item a:hover { color: var(--clr-primary); }
+.breadcrumb-item.active { color: var(--clr-text); font-weight: 500; }
+
+
+/* ── dl / dt / dd detail cards ───────────────────────────────────────────── */
+/* Pattern: <dl class="row g-2"> <dt class="col-5 text-muted">…</dt> <dd class="col-7">…</dd> */
+
+dl.row dt {
+  font-size: var(--fs-xs);
+  font-weight: 500;
+  color: #9ca3af;
+  letter-spacing: 0.01em;
+  padding-top: 0.15rem;
+}
+
+dl.row dd {
+  font-size: var(--fs-sm);
+  font-weight: 500;
+  color: var(--clr-text);
+}
+
+
+/* ── Button-check / toggle groups (log filter bar etc.) ──────────────────── */
+
+.btn-check:checked + .btn-outline-secondary {
+  background-color: var(--clr-primary);
+  border-color: var(--clr-primary);
+  color: #fff;
+}
+
+.btn-check:checked + .btn-outline-danger {
+  background-color: #dc2626;
+  border-color: #dc2626;
+  color: #fff;
+}
+
+.btn-check:checked + .btn-outline-warning {
+  background-color: #d97706;
+  border-color: #d97706;
+  color: #fff;
+}
+
+
+/* ── Open-items list (dashboard) ──────────────────────────────────────────── */
+
+.list-group-flush .list-group-item-action {
+  font-size: var(--fs-sm);
+  border-left: none;
+  border-right: none;
+  transition: background-color 0.12s;
+}
+
+.list-group-flush .list-group-item-action:hover {
+  background-color: rgba(37, 99, 235, 0.04);
+}
 
 /* ── Expiry table row / badge colors ─────────────────────────────────────── */
 
