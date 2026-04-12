@@ -14,7 +14,7 @@ from .routers import (
     dashboard, domains, exports, mail_settings, mailtemplates, mfa, notifications,
     profile, report, settings, stepup, tasks, thesslstore,
 )
-from .scheduler import shutdown_scheduler, start_scheduler
+from .scheduler import shutdown_scheduler, start_scheduler, trigger_cert_status_update
 from .templates_config import templates as _jinja_templates
 
 load_dotenv()
@@ -76,6 +76,7 @@ app.mount("/static", StaticFiles(directory=str(_STATIC_DIR)), name="static")
 @app.on_event("startup")
 def on_startup():
     start_scheduler()
+    trigger_cert_status_update()  # Bestehende Statuses beim Start sofort korrigieren
     # Jinja2-Globals aus Einstellungen laden
     try:
         from .database import SessionLocal

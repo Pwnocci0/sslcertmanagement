@@ -59,6 +59,49 @@ def _run_daily_backup() -> None:
         logger.exception("Unerwarteter Fehler beim automatischen Backup.")
 
 
+def _run_cert_status_update() -> None:
+    """Aktualisiert Certificate-Status täglich anhand des Ablaufdatums."""
+    logger.info("Zertifikat-Status-Update gestartet.")
+    try:
+        from datetime import datetime, timedelta
+        from .database import SessionLocal
+        from . import models
+
+        db = SessionLocal()
+        try:
+            now = datetime.utcnow()
+            threshold = now + timedelta(days=30)
+
+            # Abgelaufen
+            expired = db.query(models.Certificate).filter(
+                models.Certificate.valid_until < now,
+                models.Certificate.status.in_(["active", "expiring_soon"]),
+            ).update({"status": "expired"}, synchronize_session=False)
+
+            # Bald ablaufend (innerhalb 30 Tage)
+            expiring = db.query(models.Certificate).filter(
+                models.Certificate.valid_until >= now,
+                models.Certificate.valid_until <= threshold,
+                models.Certificate.status == "active",
+            ).update({"status": "expiring_soon"}, synchronize_session=False)
+
+            # Wieder aktiv (falls Ablaufdatum korrigiert)
+            reactivated = db.query(models.Certificate).filter(
+                models.Certificate.valid_until > threshold,
+                models.Certificate.status == "expiring_soon",
+            ).update({"status": "active"}, synchronize_session=False)
+
+            db.commit()
+            logger.info(
+                "Zertifikat-Status-Update: %d abgelaufen, %d bald ablaufend, %d reaktiviert.",
+                expired, expiring, reactivated,
+            )
+        finally:
+            db.close()
+    except Exception:
+        logger.exception("Unerwarteter Fehler beim Zertifikat-Status-Update.")
+
+
 def _run_notification_check() -> None:
     """Führt den Notification-Check durch (wird vom Scheduler aufgerufen)."""
     logger.info("Notification-Check gestartet.")
@@ -116,12 +159,22 @@ def start_scheduler() -> None:
         replace_existing=True,
         misfire_grace_time=3600,
     )
+    _scheduler.add_job(
+        _run_cert_status_update,
+        trigger="cron",
+        hour=0,
+        minute=30,
+        id="cert_status_update",
+        replace_existing=True,
+        misfire_grace_time=3600,
+    )
     _scheduler.start()
     logger.info(
         "Scheduler gestartet ("
         "stündlicher Notification-Check, "
         "tägliches Backup 00:05 UTC, "
-        "täglicher Log-Cleanup 01:00 UTC)."
+        "täglicher Log-Cleanup 01:00 UTC, "
+        "tägliches Zertifikat-Status-Update 00:30 UTC)."
     )
 
 
@@ -137,3 +190,8 @@ def shutdown_scheduler() -> None:
 def trigger_now() -> None:
     """Löst den Notification-Check sofort aus (für Tests/manuelles Auslösen)."""
     _run_notification_check()
+
+
+def trigger_cert_status_update() -> None:
+    """Löst den Zertifikat-Status-Update sofort aus."""
+    _run_cert_status_update()

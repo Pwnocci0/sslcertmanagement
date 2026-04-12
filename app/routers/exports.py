@@ -309,12 +309,37 @@ async def csr_export_form(csr_id: int, request: Request, db: Session = Depends(g
 
 
 @router.post("/csr/{csr_id}")
-async def csr_export_download(
+async def csr_export_post(
     csr_id: int,
     request: Request,
     db: Session = Depends(get_db),
     include_key: str = Form("off"),
     fmt: str = Form("json"),
+):
+    """Leitet bei Key-Export auf den GET-Download-Endpunkt weiter (Step-up dort)."""
+    user = login_required(request, db)
+    if isinstance(user, RedirectResponse):
+        return user
+
+    csr = db.query(models.CsrRequest).filter(models.CsrRequest.id == csr_id).first()
+    if not csr:
+        return RedirectResponse(url="/csrs", status_code=302)
+
+    if not check_customer_access(user, csr.customer_id, db):
+        return forbidden_response()
+
+    ik = "on" if (include_key == "on" and bool(csr.private_key_encrypted)) else "off"
+    return RedirectResponse(
+        url=f"/exports/csr/{csr_id}/download?include_key={ik}&fmt={fmt}",
+        status_code=302,
+    )
+
+
+@router.get("/csr/{csr_id}/download")
+async def csr_export_download(
+    csr_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
 ):
     user = login_required(request, db)
     if isinstance(user, RedirectResponse):
@@ -327,12 +352,14 @@ async def csr_export_download(
     if not check_customer_access(user, csr.customer_id, db):
         return forbidden_response()
 
+    include_key = request.query_params.get("include_key", "off")
+    fmt = request.query_params.get("fmt", "json")
     want_key = (include_key == "on") and bool(csr.private_key_encrypted)
 
     if want_key:
         redir = require_stepup(
             request, "csr_export_key",
-            next_url=f"/exports/csr/{csr_id}?include_key=on",
+            next_url=f"/exports/csr/{csr_id}/download?include_key=on&fmt={fmt}",
         )
         if redir:
             return redir
@@ -523,12 +550,39 @@ async def cert_migration_export_form(
 
 
 @router.post("/certificate/{cert_id}/migration")
-async def cert_migration_export_download(
+async def cert_migration_export_post(
     cert_id: int,
     request: Request,
     db: Session = Depends(get_db),
     include_key: str = Form("off"),
     fmt: str = Form("json"),
+):
+    """Leitet bei Key-Export auf den GET-Download-Endpunkt weiter (Step-up dort)."""
+    user = login_required(request, db)
+    if isinstance(user, RedirectResponse):
+        return user
+
+    cert = db.query(models.Certificate).filter(models.Certificate.id == cert_id).first()
+    if not cert:
+        return RedirectResponse(url="/certificates", status_code=302)
+
+    if not check_customer_access(user, cert.customer_id, db):
+        return forbidden_response()
+
+    has_key = bool(cert.csr_request_id and cert.csr_request
+                   and cert.csr_request.private_key_encrypted)
+    ik = "on" if (include_key == "on" and has_key) else "off"
+    return RedirectResponse(
+        url=f"/exports/certificate/{cert_id}/migration/download?include_key={ik}&fmt={fmt}",
+        status_code=302,
+    )
+
+
+@router.get("/certificate/{cert_id}/migration/download")
+async def cert_migration_export_download(
+    cert_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
 ):
     user = login_required(request, db)
     if isinstance(user, RedirectResponse):
@@ -541,6 +595,8 @@ async def cert_migration_export_download(
     if not check_customer_access(user, cert.customer_id, db):
         return forbidden_response()
 
+    include_key = request.query_params.get("include_key", "off")
+    fmt = request.query_params.get("fmt", "json")
     want_key = (include_key == "on") and bool(
         cert.csr_request_id and cert.csr_request
         and cert.csr_request.private_key_encrypted
@@ -549,7 +605,7 @@ async def cert_migration_export_download(
     if want_key:
         redir = require_stepup(
             request, "cert_migration_key",
-            next_url=f"/exports/certificate/{cert_id}/migration?include_key=on",
+            next_url=f"/exports/certificate/{cert_id}/migration/download?include_key=on&fmt={fmt}",
         )
         if redir:
             return redir
@@ -715,12 +771,24 @@ async def cert_import_confirm(
             },
         )
 
-    cert = import_certificate(data, cid, did, None, db)
+    # CSR-PEM vorhanden → CsrRequest anlegen/verknüpfen damit Private Key gespeichert wird
+    csr_request_id = None
+    csr_pem = data.get("csr_pem", "").strip()
+    if csr_pem.startswith("-----BEGIN CERTIFICATE REQUEST-----"):
+        existing_csr = find_duplicate_csr(csr_pem, db)
+        if existing_csr:
+            csr_request_id = existing_csr.id
+        else:
+            linked_csr = import_csr(data, cid, did, user.id, db)
+            csr_request_id = linked_csr.id
+
+    cert = import_certificate(data, cid, did, csr_request_id, db)
     db.commit()
 
     audit.log(db, "cert.imported", "certificate", user.id,
               entity_id=cert.id,
-              details={"cn": cert.common_name, "source_id": data.get("source_id")},
+              details={"cn": cert.common_name, "source_id": data.get("source_id"),
+                       "csr_request_id": csr_request_id},
               ip=_ip(request))
 
     set_flash(request, "success", f'Zertifikat "{cert.common_name}" erfolgreich importiert.')
