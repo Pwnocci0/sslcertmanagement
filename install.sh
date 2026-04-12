@@ -41,14 +41,24 @@ echo -e "${NC}"
 # ─── Vorhandene Installation erkennen ────────────────────────────────────────
 EXISTING_INSTALL=false
 EXISTING_MODE=""
+EXISTING_DOMAIN=""
+EXISTING_APP_NAME=""
+EXISTING_LE_EMAIL=""
+EXISTING_PORT=""
+EXISTING_BIND=""
 DEFAULT_INSTALL_DIR="/opt/certmgr"
 
-# Versuche Modus aus bestehender .env zu lesen
+# Werte aus bestehender .env lesen
 for dir in "$DEFAULT_INSTALL_DIR" "$SOURCE_DIR"; do
     if [[ -f "$dir/.env" ]]; then
         EXISTING_INSTALL=true
-        EXISTING_MODE=$(grep -E "^APP_INSTALL_MODE=" "$dir/.env" 2>/dev/null \
-            | cut -d= -f2 | tr -d '[:space:]' || echo "")
+        _read_env() { grep -E "^$1=" "$dir/.env" 2>/dev/null | cut -d= -f2- | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' || true; }
+        EXISTING_MODE=$(_read_env APP_INSTALL_MODE)
+        EXISTING_DOMAIN=$(_read_env APP_DOMAIN)
+        EXISTING_APP_NAME=$(_read_env APP_NAME)
+        EXISTING_LE_EMAIL=$(_read_env APP_LE_EMAIL)
+        EXISTING_PORT=$(_read_env APP_PORT)
+        EXISTING_BIND=$(_read_env APP_HOST)
         break
     fi
 done
@@ -57,21 +67,38 @@ if [[ "$EXISTING_INSTALL" == "true" ]]; then
     echo -e "  ${YELLOW}${BOLD}Vorhandene Installation erkannt.${NC}"
     [[ -n "$EXISTING_MODE" ]] && \
         echo -e "  Bisheriger Modus: ${BOLD}${EXISTING_MODE}${NC}"
-    echo -e "  Bestehende Daten (Datenbank, .env, Passwörter) werden nicht überschrieben.\n"
+    echo -e "  Bestehende Daten (Datenbank, .env, Passwörter) werden nicht überschrieben."
+    echo -e "  ${CYAN}Einfach Enter drücken, um bestehende Werte zu übernehmen.${NC}\n"
 fi
+
+# Hilfsfunktion: Wert in .env setzen oder aktualisieren
+_upsert_env() {
+    local key="$1" val="$2" file="$3"
+    if grep -q "^${key}=" "$file" 2>/dev/null; then
+        sed -i "s|^${key}=.*|${key}=${val}|" "$file"
+    else
+        echo "${key}=${val}" >> "$file"
+    fi
+}
 
 divider
 
 # ─── 1. Domain ───────────────────────────────────────────────────────────────
 echo ""
-read -r -p "  Bitte Domain für die Anwendung eingeben (z. B. ssl.example.de): " DOMAIN
+if [[ -n "$EXISTING_DOMAIN" ]]; then
+    read -r -p "  Domain [aktuell: $EXISTING_DOMAIN]: " _INPUT
+    DOMAIN="${_INPUT:-$EXISTING_DOMAIN}"
+else
+    read -r -p "  Domain (z. B. ssl.example.de): " DOMAIN
+fi
 DOMAIN="${DOMAIN// /}"
 [[ -z "$DOMAIN" ]] && error "Domain darf nicht leer sein."
 
 # ─── 1b. Anwendungsname ──────────────────────────────────────────────────────
 echo ""
-read -r -p "  Anwendungsname [Standard: SSL Cert Management]: " APP_NAME_INPUT
-APP_NAME="${APP_NAME_INPUT:-SSL Cert Management}"
+_DEFAULT_NAME="${EXISTING_APP_NAME:-SSL Cert Management}"
+read -r -p "  Anwendungsname [aktuell: $_DEFAULT_NAME]: " _INPUT
+APP_NAME="${_INPUT:-$_DEFAULT_NAME}"
 
 # ─── 2. Betriebsmodus ────────────────────────────────────────────────────────
 echo ""
@@ -82,46 +109,45 @@ echo -e "    ${CYAN}2${NC}) Externer Nginx / Reverse Proxy"
 echo -e "       (App lauscht intern; HTTPS übernimmt ein vorgelagerter Proxy)"
 echo ""
 
-DEFAULT_MODE=""
-if [[ "$EXISTING_MODE" == "A" ]]; then DEFAULT_MODE=" [aktuell: 1]"
-elif [[ "$EXISTING_MODE" == "B" ]]; then DEFAULT_MODE=" [aktuell: 2]"
+_DEFAULT_MODE_NUM=""
+if [[ "$EXISTING_MODE" == "A" ]]; then _DEFAULT_MODE_NUM="1"
+elif [[ "$EXISTING_MODE" == "B" ]]; then _DEFAULT_MODE_NUM="2"
 fi
 
-read -r -p "  Modus wählen${DEFAULT_MODE} [1/2]: " MODE_INPUT
+_MODE_HINT=""
+[[ -n "$_DEFAULT_MODE_NUM" ]] && _MODE_HINT=" [aktuell: $_DEFAULT_MODE_NUM, Enter zum Übernehmen]"
+read -r -p "  Modus wählen${_MODE_HINT} [1/2]: " MODE_INPUT
 MODE_INPUT="${MODE_INPUT// /}"
+MODE_INPUT="${MODE_INPUT:-$_DEFAULT_MODE_NUM}"
 
 case "$MODE_INPUT" in
-    1|"")
-        if [[ -z "$MODE_INPUT" && "$EXISTING_MODE" == "B" ]]; then
-            error "Ungültige Eingabe. Bitte 1 oder 2 eingeben."
-        fi
-        INSTALL_MODE="A"
-        ;;
-    2)
-        INSTALL_MODE="B"
-        ;;
-    *)
-        error "Ungültige Eingabe. Bitte 1 oder 2 eingeben."
-        ;;
+    1) INSTALL_MODE="A" ;;
+    2) INSTALL_MODE="B" ;;
+    *) error "Ungültige Eingabe. Bitte 1 oder 2 eingeben." ;;
 esac
 
 # ─── 3a. Modus A: E-Mail für Let's Encrypt ───────────────────────────────────
 LE_EMAIL=""
 if [[ "$INSTALL_MODE" == "A" ]]; then
     echo ""
-    read -r -p "  E-Mail-Adresse für Let's Encrypt: " LE_EMAIL
+    if [[ -n "$EXISTING_LE_EMAIL" ]]; then
+        read -r -p "  E-Mail für Let's Encrypt [aktuell: $EXISTING_LE_EMAIL]: " _INPUT
+        LE_EMAIL="${_INPUT:-$EXISTING_LE_EMAIL}"
+    else
+        read -r -p "  E-Mail-Adresse für Let's Encrypt: " LE_EMAIL
+    fi
     LE_EMAIL="${LE_EMAIL// /}"
     [[ -z "$LE_EMAIL" ]] && error "E-Mail-Adresse darf nicht leer sein."
     ADMIN_EMAIL="$LE_EMAIL"
 fi
 
 # ─── 3b. Modus B: Port und Bind-Adresse ──────────────────────────────────────
-APP_PORT=8000
-APP_BIND="127.0.0.1"
+APP_PORT="${EXISTING_PORT:-8000}"
+APP_BIND="${EXISTING_BIND:-127.0.0.1}"
 
 if [[ "$INSTALL_MODE" == "B" ]]; then
     echo ""
-    read -r -p "  App-Port (Standard: 8000): " PORT_INPUT
+    read -r -p "  App-Port [aktuell: $APP_PORT]: " PORT_INPUT
     PORT_INPUT="${PORT_INPUT// /}"
     if [[ -n "$PORT_INPUT" ]]; then
         if ! [[ "$PORT_INPUT" =~ ^[0-9]+$ ]] || [[ "$PORT_INPUT" -lt 1024 ]] || [[ "$PORT_INPUT" -gt 65535 ]]; then
@@ -130,15 +156,18 @@ if [[ "$INSTALL_MODE" == "B" ]]; then
         APP_PORT="$PORT_INPUT"
     fi
 
+    _DEFAULT_BIND_NUM="1"
+    [[ "$APP_BIND" == "0.0.0.0" ]] && _DEFAULT_BIND_NUM="2"
+
     echo ""
     echo -e "  ${BOLD}Bind-Adresse wählen:${NC}"
     echo -e "    ${CYAN}1${NC}) 127.0.0.1  – nur lokal (sicher, Proxy muss auf gleichem Host sein)"
     echo -e "    ${CYAN}2${NC}) 0.0.0.0    – alle Interfaces (für externen Proxy in anderem Netz)"
     echo ""
-    read -r -p "  Bind-Adresse [1/2, Standard: 1]: " BIND_INPUT
+    read -r -p "  Bind-Adresse [aktuell: $_DEFAULT_BIND_NUM] [1/2]: " BIND_INPUT
     BIND_INPUT="${BIND_INPUT// /}"
 
-    case "${BIND_INPUT:-1}" in
+    case "${BIND_INPUT:-$_DEFAULT_BIND_NUM}" in
         1) APP_BIND="127.0.0.1" ;;
         2)
             APP_BIND="0.0.0.0"
@@ -160,9 +189,11 @@ fi
 # Modus B: ADMIN_EMAIL = admin@DOMAIN (bereits gesetzt)
 
 # ─── 5. Installationspfad ────────────────────────────────────────────────────
+_DEFAULT_INSTALL_DIR="/opt/certmgr"
+[[ "$EXISTING_INSTALL" == "true" && -d "$DEFAULT_INSTALL_DIR" ]] && _DEFAULT_INSTALL_DIR="$DEFAULT_INSTALL_DIR"
 echo ""
-read -r -p "  Installationspfad [Standard: /opt/certmgr]: " INSTALL_DIR_INPUT
-INSTALL_DIR="${INSTALL_DIR_INPUT:-/opt/certmgr}"
+read -r -p "  Installationspfad [aktuell: $_DEFAULT_INSTALL_DIR]: " INSTALL_DIR_INPUT
+INSTALL_DIR="${INSTALL_DIR_INPUT:-$_DEFAULT_INSTALL_DIR}"
 INSTALL_DIR="${INSTALL_DIR%/}"
 
 # ─── Zusammenfassung ─────────────────────────────────────────────────────────
@@ -350,6 +381,11 @@ elif [[ "$CREATE_ADMIN" == "true" ]]; then
 else
     info ".env bereits vorhanden – wird nicht verändert."
 fi
+
+# Installationsparameter in .env persistieren (für spätere Updates)
+_upsert_env "APP_DOMAIN"  "$DOMAIN"   "$INSTALL_DIR/.env"
+_upsert_env "APP_NAME"    "$APP_NAME" "$INSTALL_DIR/.env"
+[[ -n "$LE_EMAIL" ]] && _upsert_env "APP_LE_EMAIL" "$LE_EMAIL" "$INSTALL_DIR/.env"
 
 # ─── Datenbank initialisieren ────────────────────────────────────────────────
 step "Datenbank initialisieren"
