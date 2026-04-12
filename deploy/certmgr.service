@@ -26,7 +26,7 @@ SyslogIdentifier=certmgr
 # Sicherheitshärtung
 NoNewPrivileges=true
 PrivateTmp=true
-ProtectSystem=strict
+ProtectSystem=full
 ReadWritePaths=%%INSTALL_DIR%%/data %%INSTALL_DIR%%/static/uploads
 
 [Install]

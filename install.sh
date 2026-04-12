@@ -309,7 +309,7 @@ chown root:root "$INSTALL_DIR"
 chmod 755 "$INSTALL_DIR"
 chown "$APP_USER:$APP_USER" "$INSTALL_DIR/data"
 chmod 750 "$INSTALL_DIR/data"
-chown "$APP_USER:$APP_USER" "$INSTALL_DIR/static/uploads"
+chown -R "$APP_USER:$APP_USER" "$INSTALL_DIR/static/uploads"
 chmod 755 "$INSTALL_DIR/static/uploads"
 info "Verzeichnisse angelegt."
 
@@ -453,7 +453,7 @@ StandardError=journal
 SyslogIdentifier=certmgr
 NoNewPrivileges=true
 PrivateTmp=true
-ProtectSystem=strict
+ProtectSystem=full
 ReadWritePaths=${INSTALL_DIR}/data ${INSTALL_DIR}/static/uploads
 
 [Install]
