@@ -27,7 +27,7 @@ SyslogIdentifier=certmgr
 NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=strict
-ReadWritePaths=%%INSTALL_DIR%%/data
+ReadWritePaths=%%INSTALL_DIR%%/data %%INSTALL_DIR%%/static/uploads
 
 [Install]
 WantedBy=multi-user.target
