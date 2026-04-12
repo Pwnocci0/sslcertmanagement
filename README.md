@@ -15,6 +15,15 @@ Interne Webanwendung zur Verwaltung von SSL-Zertifikaten für einen MSP.
 - Eine Domain (DNS-A-Record auf den Server zeigt, wenn Let's Encrypt genutzt wird)
 - Internetverbindung (für Pakete)
 
+### System vorbereiten
+
+Vor der Installation sicherstellen, dass das System aktuell ist und die benötigten Pakete installiert sind:
+
+```bash
+sudo apt update && sudo apt upgrade -y
+sudo apt install -y python3 python3-venv python3-pip git
+```
+
 ### Schritt-für-Schritt
 
 **1. Projekt auf den Server kopieren**
@@ -36,6 +45,7 @@ Der Installer fragt interaktiv ab:
 | Frage | Beispiel | Standard |
 |---|---|---|
 | Domain | `ssl.example.de` | – (Pflicht) |
+| Anwendungsname | `Mein SSL Manager` | `SSL Cert Management` |
 | **Modus** | `1` oder `2` | – (Pflicht) |
 | E-Mail (nur Modus 1) | `admin@example.de` | – (Pflicht) |
 | App-Port (nur Modus 2) | `8000` | `8000` |

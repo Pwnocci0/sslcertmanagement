@@ -16,7 +16,7 @@ from ..settings_service import CATEGORY_LABELS, DEFINITIONS, get_settings_servic
 router = APIRouter(prefix="/settings", tags=["settings"])
 from ..templates_config import templates
 
-_UPLOAD_DIR = Path("static/uploads")
+_UPLOAD_DIR = Path(__file__).resolve().parent.parent.parent / "static" / "uploads"
 _FAVICON_ALLOWED = {".ico", ".png", ".svg"}
 _LOGO_ALLOWED = {".png", ".svg", ".jpg", ".jpeg"}
 _MAX_UPLOAD_BYTES = 2 * 1024 * 1024  # 2 MB

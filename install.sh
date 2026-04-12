@@ -68,6 +68,11 @@ read -r -p "  Bitte Domain für die Anwendung eingeben (z. B. ssl.example.de): "
 DOMAIN="${DOMAIN// /}"
 [[ -z "$DOMAIN" ]] && error "Domain darf nicht leer sein."
 
+# ─── 1b. Anwendungsname ──────────────────────────────────────────────────────
+echo ""
+read -r -p "  Anwendungsname [Standard: SSL Cert Management]: " APP_NAME_INPUT
+APP_NAME="${APP_NAME_INPUT:-SSL Cert Management}"
+
 # ─── 2. Betriebsmodus ────────────────────────────────────────────────────────
 echo ""
 echo -e "  ${BOLD}Betriebsmodus wählen:${NC}"
@@ -165,6 +170,7 @@ echo ""
 divider
 echo ""
 info "Domain        : $DOMAIN"
+info "Anwendungsname: $APP_NAME"
 if [[ "$INSTALL_MODE" == "A" ]]; then
     info "Modus         : A – Lokaler Nginx + Let's Encrypt"
     info "LE-E-Mail     : $LE_EMAIL"
@@ -267,11 +273,13 @@ fi
 # ─── Verzeichnisse & Rechte ──────────────────────────────────────────────────
 step "Verzeichnisse anlegen"
 
-mkdir -p "$INSTALL_DIR/data" "$INSTALL_DIR/deploy"
+mkdir -p "$INSTALL_DIR/data" "$INSTALL_DIR/deploy" "$INSTALL_DIR/static/uploads"
 chown root:root "$INSTALL_DIR"
 chmod 755 "$INSTALL_DIR"
 chown "$APP_USER:$APP_USER" "$INSTALL_DIR/data"
 chmod 750 "$INSTALL_DIR/data"
+chown "$APP_USER:$APP_USER" "$INSTALL_DIR/static/uploads"
+chmod 755 "$INSTALL_DIR/static/uploads"
 info "Verzeichnisse angelegt."
 
 # ─── Virtuelle Umgebung ──────────────────────────────────────────────────────
@@ -410,7 +418,7 @@ SyslogIdentifier=certmgr
 NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=strict
-ReadWritePaths=${INSTALL_DIR}/data
+ReadWritePaths=${INSTALL_DIR}/data ${INSTALL_DIR}/static/uploads
 
 [Install]
 WantedBy=multi-user.target
@@ -638,6 +646,44 @@ EXTEOF
     APP_URL="http://${DOMAIN} (via externem Proxy)"
 
 fi  # Ende Modus B
+
+# ─── Initiale App-Einstellungen in DB schreiben ───────────────────────────────
+step "App-Einstellungen initialisieren"
+
+# Basis-URL ableiten
+if [[ "$INSTALL_MODE" == "A" ]]; then
+    if [[ "$HTTPS_ENABLED" == "true" ]]; then
+        FINAL_BASE_URL="https://${DOMAIN}"
+    else
+        FINAL_BASE_URL="http://${DOMAIN}"
+    fi
+else
+    FINAL_BASE_URL="https://${DOMAIN}"
+fi
+
+cd "$INSTALL_DIR"
+sudo -u "$APP_USER" "$INSTALL_DIR/.venv/bin/python" - <<PYEOF
+import os, sys
+sys.path.insert(0, '$INSTALL_DIR')
+os.chdir('$INSTALL_DIR')
+from dotenv import load_dotenv
+load_dotenv('$INSTALL_DIR/.env')
+from app.database import SessionLocal
+from app.settings_service import get_settings_service, _invalidate_cache
+_invalidate_cache()
+db = SessionLocal()
+try:
+    svc = get_settings_service(db)
+    svc.set_many({
+        'app.name': '$APP_NAME',
+        'app.base_url': '$FINAL_BASE_URL',
+    }, user_id=None)
+    print('  app.name    = $APP_NAME')
+    print('  app.base_url = $FINAL_BASE_URL')
+finally:
+    db.close()
+PYEOF
+info "Einstellungen gespeichert."
 
 # =============================================================================
 # Abschlussblock

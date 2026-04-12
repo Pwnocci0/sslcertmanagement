@@ -1,6 +1,7 @@
 import logging
 import logging.handlers
 import os
+from pathlib import Path
 
 from dotenv import load_dotenv
 from fastapi import FastAPI
@@ -63,10 +64,13 @@ app.add_middleware(
     https_only=False,  # auf True setzen wenn HTTPS aktiv
 )
 
-app.mount("/static", StaticFiles(directory="static"), name="static")
+_BASE_DIR = Path(__file__).resolve().parent.parent
+_STATIC_DIR = _BASE_DIR / "static"
+
+app.mount("/static", StaticFiles(directory=str(_STATIC_DIR)), name="static")
 
 # Uploads-Verzeichnis sicherstellen
-os.makedirs("static/uploads", exist_ok=True)
+(_STATIC_DIR / "uploads").mkdir(parents=True, exist_ok=True)
 
 
 @app.on_event("startup")
