@@ -491,7 +491,7 @@ async def csr_import_confirm(
               details={"cn": csr.common_name, "source_id": data.get("source_id")},
               ip=_ip(request))
 
-    set_flash(request, "success", f"CSR „{csr.common_name}" erfolgreich importiert.")
+    set_flash(request, "success", f'CSR "{csr.common_name}" erfolgreich importiert.')
     return RedirectResponse(url=f"/csrs/{csr.id}", status_code=302)
 
 
@@ -723,5 +723,5 @@ async def cert_import_confirm(
               details={"cn": cert.common_name, "source_id": data.get("source_id")},
               ip=_ip(request))
 
-    set_flash(request, "success", f"Zertifikat „{cert.common_name}" erfolgreich importiert.")
+    set_flash(request, "success", f'Zertifikat "{cert.common_name}" erfolgreich importiert.')
     return RedirectResponse(url=f"/certificates/{cert.id}", status_code=302)
