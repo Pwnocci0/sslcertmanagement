@@ -350,7 +350,7 @@ async def csr_export_download(
         if want_key:
             from ..crypto import decrypt_private_key as _dk
             try:
-                pem_files["private_key.pem"] = _dk(csr.private_key_encrypted)
+                pem_files["private_key.pem"] = _dk(csr.private_key_encrypted).decode("utf-8")
             except Exception:
                 pass
         zip_bytes = build_export_zip(manifest, pem_files)
@@ -573,7 +573,7 @@ async def cert_migration_export_download(
         if want_key:
             from ..crypto import decrypt_private_key as _dk
             try:
-                pem_files["private_key.pem"] = _dk(cert.csr_request.private_key_encrypted)
+                pem_files["private_key.pem"] = _dk(cert.csr_request.private_key_encrypted).decode("utf-8")
             except Exception:
                 pass
         zip_bytes = build_export_zip(manifest, pem_files)

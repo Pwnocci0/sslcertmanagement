@@ -87,7 +87,7 @@ def export_csr(csr: models.CsrRequest, include_key: bool = False) -> dict[str, A
 
     if include_key and csr.private_key_encrypted:
         try:
-            data["private_key_pem"] = decrypt_private_key(csr.private_key_encrypted)
+            data["private_key_pem"] = decrypt_private_key(csr.private_key_encrypted).decode("utf-8")
         except Exception:
             pass
 
@@ -136,7 +136,7 @@ def export_certificate(
         try:
             data["private_key_pem"] = decrypt_private_key(
                 cert.csr_request.private_key_encrypted
-            )
+            ).decode("utf-8")
         except Exception:
             pass
 
