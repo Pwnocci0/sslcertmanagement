@@ -1,0 +1,174 @@
+{% extends "base.html" %}
+{% block title %}Zertifikat importieren – SSL Cert Management{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-md-7">
+
+    <nav aria-label="breadcrumb" class="mb-3">
+      <ol class="breadcrumb">
+        <li class="breadcrumb-item"><a href="/certificates" class="text-decoration-none">Zertifikate</a></li>
+        <li class="breadcrumb-item active">Zertifikat importieren</li>
+      </ol>
+    </nav>
+
+    {% if flash %}
+    <div class="alert alert-{{ flash.type }} alert-dismissible fade show" role="alert">
+      {{ flash.message }}
+      <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+    {% endif %}
+
+    {% if step == "upload" %}
+    <!-- ── Schritt 1: Datei hochladen ─────────────────────────────────────── -->
+    <div class="card shadow-sm">
+      <div class="card-header">
+        <i class="bi bi-box-arrow-in-down me-1"></i>Zertifikat importieren
+      </div>
+      <div class="card-body">
+        <p class="text-muted small">
+          Unterstützte Formate: <strong>.json</strong> (Migrations-Export) oder
+          <strong>.zip</strong> (mit PEM-Dateien). Die Datei muss vom Typ
+          <code>"type": "certificate"</code> sein.
+        </p>
+
+        {% if errors %}
+        <div class="alert alert-danger">
+          <ul class="mb-0 ps-3">
+            {% for e in errors %}<li>{{ e }}</li>{% endfor %}
+          </ul>
+        </div>
+        {% endif %}
+
+        <form method="post" enctype="multipart/form-data">
+          <div class="mb-3">
+            <label class="form-label fw-semibold">Export-Datei <span class="text-danger">*</span></label>
+            <input type="file" name="file" class="form-control" accept=".json,.zip" required>
+          </div>
+          <div class="d-flex gap-2">
+            <button type="submit" class="btn btn-primary">
+              <i class="bi bi-upload me-1"></i>Datei analysieren
+            </button>
+            <a href="/certificates" class="btn btn-outline-secondary">Abbrechen</a>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    {% elif step == "confirm" %}
+    <!-- ── Schritt 2: Vorschau + Zuordnung ───────────────────────────────── -->
+
+    {% if duplicate %}
+    <div class="alert alert-warning d-flex gap-3 align-items-start">
+      <i class="bi bi-exclamation-triangle-fill fs-4 flex-shrink-0 mt-1"></i>
+      <div>
+        <strong>Duplikat gefunden:</strong> Ein Zertifikat mit dieser Seriennummer existiert bereits
+        (<a href="/certificates/{{ duplicate.id }}" class="alert-link">ID {{ duplicate.id }}: {{ duplicate.common_name }}</a>).
+        {% if not force_visible %}
+        Der Import wird blockiert. Wählen Sie unten „Trotzdem importieren", um fortzufahren.
+        {% endif %}
+      </div>
+    </div>
+    {% endif %}
+
+    {% if errors %}
+    <div class="alert alert-danger">
+      <ul class="mb-0 ps-3">
+        {% for e in errors %}<li>{{ e }}</li>{% endfor %}
+      </ul>
+    </div>
+    {% endif %}
+
+    <div class="card shadow-sm mb-3">
+      <div class="card-header fw-semibold">
+        <i class="bi bi-eye me-1"></i>Vorschau
+      </div>
+      <div class="card-body p-0">
+        <table class="table table-sm mb-0">
+          <tbody>
+            <tr><th class="ps-3 w-35">Common Name</th><td class="font-monospace">{{ data.common_name }}</td></tr>
+            {% if data.san %}<tr><th class="ps-3">SANs</th><td class="font-monospace small">{{ data.san }}</td></tr>{% endif %}
+            {% if data.issuer %}<tr><th class="ps-3">Aussteller</th><td class="small">{{ data.issuer }}</td></tr>{% endif %}
+            {% if data.serial_number %}<tr><th class="ps-3">Seriennummer</th><td class="font-monospace small">{{ data.serial_number }}</td></tr>{% endif %}
+            {% if data.valid_from %}<tr><th class="ps-3">Gültig von</th><td>{{ data.valid_from }}</td></tr>{% endif %}
+            {% if data.valid_until %}<tr><th class="ps-3">Gültig bis</th><td>{{ data.valid_until }}</td></tr>{% endif %}
+            <tr>
+              <th class="ps-3">Status</th>
+              <td><span class="badge bg-secondary">{{ data.status or 'active' }}</span></td>
+            </tr>
+            {% if data.certificate_pem %}
+            <tr>
+              <th class="ps-3">Zertifikat-PEM</th>
+              <td><span class="badge bg-success"><i class="bi bi-check me-1"></i>Vorhanden</span></td>
+            </tr>
+            {% endif %}
+            {% if data.private_key_pem %}
+            <tr>
+              <th class="ps-3">Private Key</th>
+              <td><span class="badge bg-warning text-dark"><i class="bi bi-key me-1"></i>Enthalten</span></td>
+            </tr>
+            {% endif %}
+            {% if data.customer %}<tr><th class="ps-3">Kunde (Quelle)</th><td class="text-muted">{{ data.customer }}</td></tr>{% endif %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="card shadow-sm">
+      <div class="card-header fw-semibold">
+        <i class="bi bi-diagram-3 me-1"></i>Zuordnung
+      </div>
+      <div class="card-body">
+        <form method="post" action="/exports/certificates/import/confirm">
+          <input type="hidden" name="manifest_b64" value="{{ manifest_b64 }}">
+
+          <div class="mb-3">
+            <label class="form-label fw-semibold">Kunde <span class="text-danger">*</span></label>
+            <select name="customer_id" class="form-select" required>
+              <option value="">— Bitte wählen —</option>
+              {% for c in customers %}
+              <option value="{{ c.id }}"
+                {% if data.customer == c.name %}selected{% endif %}>
+                {{ c.name }}
+              </option>
+              {% endfor %}
+            </select>
+            <div class="form-text">Zertifikate benötigen immer einen Kunden.</div>
+          </div>
+
+          <div class="mb-3">
+            <label class="form-label fw-semibold">Domain</label>
+            <select name="domain_id" class="form-select">
+              <option value="">— Keine Domain —</option>
+              {% for d in domains %}
+              <option value="{{ d.id }}"
+                {% if data.domain == d.fqdn %}selected{% endif %}>
+                {{ d.fqdn }}
+              </option>
+              {% endfor %}
+            </select>
+          </div>
+
+          {% if duplicate %}
+          <div class="form-check mb-3">
+            <input class="form-check-input" type="checkbox" name="force" value="on" id="forceImport">
+            <label class="form-check-label text-warning fw-semibold" for="forceImport">
+              Trotzdem importieren (Duplikat wird zusätzlich angelegt)
+            </label>
+          </div>
+          {% endif %}
+
+          <div class="d-flex gap-2">
+            <button type="submit" class="btn btn-success">
+              <i class="bi bi-check-lg me-1"></i>Zertifikat importieren
+            </button>
+            <a href="/exports/certificates/import" class="btn btn-outline-secondary">Zurück</a>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

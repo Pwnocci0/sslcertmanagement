@@ -7,9 +7,14 @@
     <h4 class="fw-bold mb-0"><i class="bi bi-file-earmark-code me-2"></i>CSR-Verwaltung</h4>
     <p class="text-muted small mb-0">{{ csrs | length }} Einträge</p>
   </div>
-  <a href="/csrs/new" class="btn btn-success btn-sm">
-    <i class="bi bi-plus-lg me-1"></i>Neuer CSR
-  </a>
+  <div class="d-flex gap-2">
+    <a href="/exports/csrs/import" class="btn btn-outline-secondary btn-sm">
+      <i class="bi bi-box-arrow-in-down me-1"></i>Importieren
+    </a>
+    <a href="/csrs/new" class="btn btn-success btn-sm">
+      <i class="bi bi-plus-lg me-1"></i>Neuer CSR
+    </a>
+  </div>
 </div>
 
 <!-- Suche -->

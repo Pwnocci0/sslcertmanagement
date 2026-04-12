@@ -1,0 +1,92 @@
+{% extends "base.html" %}
+{% block title %}CSR-Export – {{ csr.common_name }} – SSL Cert Management{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-md-6">
+
+    <nav aria-label="breadcrumb" class="mb-3">
+      <ol class="breadcrumb">
+        <li class="breadcrumb-item"><a href="/csrs" class="text-decoration-none">CSR-Verwaltung</a></li>
+        <li class="breadcrumb-item"><a href="/csrs/{{ csr.id }}" class="text-decoration-none font-monospace">{{ csr.common_name }}</a></li>
+        <li class="breadcrumb-item active">Export</li>
+      </ol>
+    </nav>
+
+    {% if flash %}
+    <div class="alert alert-{{ flash.type }} alert-dismissible fade show" role="alert">
+      {{ flash.message }}
+      <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+    {% endif %}
+
+    <div class="card shadow-sm">
+      <div class="card-header">
+        <i class="bi bi-box-arrow-up me-1"></i>CSR-Export: <strong>{{ csr.common_name }}</strong>
+      </div>
+      <div class="card-body">
+        <p class="text-muted small">
+          Exportiert den CSR als JSON- oder ZIP-Datei. Das Exportformat kann auf einem anderen
+          System wieder importiert werden.
+        </p>
+
+        <form method="post">
+          <div class="list-group mb-4">
+            <label class="list-group-item d-flex gap-3">
+              <input class="form-check-input flex-shrink-0" type="checkbox" checked disabled>
+              <span>
+                <strong>CSR</strong> (<code>csr.pem</code>)
+                <div class="text-muted small">Certificate Signing Request (immer enthalten).</div>
+              </span>
+            </label>
+
+            <label class="list-group-item d-flex gap-3">
+              <input class="form-check-input flex-shrink-0" type="checkbox"
+                     name="include_key" value="on"
+                     {% if not has_key %}disabled{% endif %}>
+              <span>
+                <strong>Private Key</strong> (<code>private_key.pem</code>)
+                <div class="text-muted small">
+                  {% if has_key %}
+                  <span class="text-warning"><i class="bi bi-shield-lock me-1"></i>Erfordert Step-up-Authentifizierung.</span>
+                  {% else %}
+                  <span class="text-muted">Kein Private Key vorhanden.</span>
+                  {% endif %}
+                </div>
+              </span>
+            </label>
+          </div>
+
+          <div class="mb-3">
+            <label class="form-label fw-semibold">Format</label>
+            <div class="d-flex gap-3">
+              <div class="form-check">
+                <input class="form-check-input" type="radio" name="fmt" id="fmtJson" value="json" checked>
+                <label class="form-check-label" for="fmtJson">
+                  <i class="bi bi-filetype-json me-1"></i>JSON
+                  <small class="text-muted d-block">Kompakt, ohne Private Key empfohlen.</small>
+                </label>
+              </div>
+              <div class="form-check">
+                <input class="form-check-input" type="radio" name="fmt" id="fmtZip" value="zip">
+                <label class="form-check-label" for="fmtZip">
+                  <i class="bi bi-file-zip me-1"></i>ZIP
+                  <small class="text-muted d-block">Enthält manifest.json + PEM-Dateien.</small>
+                </label>
+              </div>
+            </div>
+          </div>
+
+          <div class="d-flex gap-2">
+            <button type="submit" class="btn btn-success">
+              <i class="bi bi-download me-1"></i>Exportieren
+            </button>
+            <a href="/csrs/{{ csr.id }}" class="btn btn-outline-secondary">Abbrechen</a>
+          </div>
+        </form>
+      </div>
+    </div>
+
+  </div>
+</div>
+{% endblock %}
