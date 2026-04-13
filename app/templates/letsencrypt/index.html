@@ -1,0 +1,246 @@
+{% extends "base.html" %}
+{% block title %}Let's Encrypt – {{ app_name }}{% endblock %}
+
+{% block content %}
+<div class="row g-4">
+  {% include "settings/_sidebar.html" %}
+  <div class="col-lg-10 col-md-9">
+
+<div class="d-flex align-items-center mb-3 gap-2">
+  <i class="bi bi-lock-fill fs-3 text-success"></i>
+  <h4 class="mb-0">Let's Encrypt</h4>
+</div>
+
+{% if not local_nginx %}
+<div class="alert alert-warning">
+  <i class="bi bi-exclamation-triangle-fill me-2"></i>
+  <strong>Nicht verfügbar:</strong>
+  Let's Encrypt ist nur im Modus A (lokaler NGINX) verfügbar.
+  Diese Installation verwendet einen externen Reverse Proxy (Modus B).
+</div>
+{% else %}
+
+<div class="row g-3 mb-4">
+
+  <!-- Einstellungen -->
+  <div class="col-lg-6">
+    <div class="card border-0 shadow-sm h-100">
+      <div class="card-header bg-transparent fw-semibold">
+        <i class="bi bi-sliders me-1"></i>Konfiguration
+      </div>
+      <div class="card-body">
+        <form method="post" action="/letsencrypt/settings" novalidate>
+
+          <div class="form-check form-switch mb-3">
+            <input class="form-check-input" type="checkbox" id="enabled" name="enabled"
+                   {% if enabled %}checked{% endif %}>
+            <label class="form-check-label fw-semibold" for="enabled">
+              Let's Encrypt aktivieren
+            </label>
+          </div>
+
+          <div class="mb-3">
+            <label class="form-label fw-semibold" for="domain">
+              Domain <span class="text-danger">*</span>
+            </label>
+            <input type="text" id="domain" name="domain"
+                   class="form-control font-monospace"
+                   value="{{ domain }}"
+                   placeholder="ssl.example.de">
+            <div class="form-text">
+              Die Domain muss öffentlich auf diesen Server zeigen (HTTP-01-Challenge).
+            </div>
+          </div>
+
+          <div class="mb-3">
+            <label class="form-label fw-semibold" for="email">
+              E-Mail (ACME) <span class="text-danger">*</span>
+            </label>
+            <input type="email" id="email" name="email"
+                   class="form-control"
+                   value="{{ email }}"
+                   placeholder="admin@example.de">
+            <div class="form-text">
+              Wird für Ablauf-Benachrichtigungen von Let's Encrypt verwendet.
+            </div>
+          </div>
+
+          <div class="mb-3">
+            <label class="form-label fw-semibold">Umgebung</label>
+            <div class="form-check">
+              <input class="form-check-input" type="radio" name="staging_choice"
+                     id="env_staging" value="staging"
+                     {% if staging %}checked{% endif %}
+                     onchange="document.getElementById('staging').value='on'">
+              <label class="form-check-label" for="env_staging">
+                Let's Encrypt Staging
+                <span class="text-muted small ms-1">– Testbetrieb, keine Rate Limits</span>
+              </label>
+            </div>
+            <div class="form-check">
+              <input class="form-check-input" type="radio" name="staging_choice"
+                     id="env_production" value="production"
+                     {% if not staging %}checked{% endif %}
+                     onchange="document.getElementById('staging').value='off'">
+              <label class="form-check-label" for="env_production">
+                Let's Encrypt Produktion
+                <span class="text-muted small ms-1">– Echte Zertifikate, Rate Limits beachten</span>
+              </label>
+            </div>
+            <input type="hidden" id="staging" name="staging" value="{{ 'on' if staging else 'off' }}">
+          </div>
+
+          <div class="form-check form-switch mb-3">
+            <input class="form-check-input" type="checkbox" id="auto_renew" name="auto_renew"
+                   {% if auto_renew %}checked{% endif %}>
+            <label class="form-check-label" for="auto_renew">
+              Automatische Verlängerung (30 Tage vor Ablauf)
+            </label>
+          </div>
+
+          <button type="submit" class="btn btn-primary">
+            <i class="bi bi-floppy me-1"></i>Speichern
+          </button>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- Status -->
+  <div class="col-lg-6">
+    <div class="card border-0 shadow-sm h-100">
+      <div class="card-header bg-transparent fw-semibold d-flex align-items-center">
+        <span><i class="bi bi-info-circle me-1"></i>Zertifikatsstatus</span>
+        {% if enabled and domain %}
+        <form method="post" action="/letsencrypt/request" class="ms-auto">
+          <button type="submit" class="btn btn-sm btn-outline-success"
+                  onclick="return confirm('Erneuerung jetzt anfordern?')">
+            <i class="bi bi-arrow-clockwise me-1"></i>Jetzt erneuern
+          </button>
+        </form>
+        {% endif %}
+      </div>
+      <div class="card-body">
+
+        {% if not enabled %}
+        <div class="text-muted small">
+          <i class="bi bi-info-circle me-1"></i>Let's Encrypt ist deaktiviert.
+        </div>
+
+        {% elif not domain %}
+        <div class="alert alert-warning py-2 mb-0">
+          <i class="bi bi-exclamation-triangle me-1"></i>Keine Domain konfiguriert.
+        </div>
+
+        {% elif cert_status and cert_status.error %}
+        <div class="alert alert-warning py-2 mb-0">
+          <i class="bi bi-exclamation-triangle me-1"></i>{{ cert_status.error }}
+        </div>
+
+        {% elif cert_status and cert_status.found %}
+        {% set cs = cert_status %}
+        <table class="table table-sm mb-0">
+          <tbody>
+            <tr>
+              <td class="text-muted w-50">Domain</td>
+              <td class="font-monospace">{{ cs.domain }}</td>
+            </tr>
+            <tr>
+              <td class="text-muted">Aussteller</td>
+              <td>{{ cs.issuer or '–' }}</td>
+            </tr>
+            <tr>
+              <td class="text-muted">Gültig von</td>
+              <td>{{ cs.valid_from.strftime('%d.%m.%Y') if cs.valid_from else '–' }}</td>
+            </tr>
+            <tr>
+              <td class="text-muted">Gültig bis</td>
+              <td>
+                {{ cs.valid_until.strftime('%d.%m.%Y') if cs.valid_until else '–' }}
+                {% if cs.days_remaining is not none %}
+                  {% if cs.days_remaining <= 0 %}
+                    <span class="badge bg-danger ms-1">Abgelaufen</span>
+                  {% elif cs.days_remaining <= 14 %}
+                    <span class="badge bg-danger ms-1">{{ cs.days_remaining }} Tage</span>
+                  {% elif cs.days_remaining <= 30 %}
+                    <span class="badge bg-warning text-dark ms-1">{{ cs.days_remaining }} Tage</span>
+                  {% else %}
+                    <span class="badge bg-success ms-1">{{ cs.days_remaining }} Tage</span>
+                  {% endif %}
+                {% endif %}
+              </td>
+            </tr>
+            <tr>
+              <td class="text-muted">Letzte Erneuerung</td>
+              <td>{{ cs.last_renewed.strftime('%d.%m.%Y %H:%M') if cs.last_renewed else '–' }}</td>
+            </tr>
+            {% if next_renewal %}
+            <tr>
+              <td class="text-muted">Nächste Erneuerung</td>
+              <td>{{ next_renewal.strftime('%d.%m.%Y') }}</td>
+            </tr>
+            {% endif %}
+            <tr>
+              <td class="text-muted">Status</td>
+              <td>
+                {% if cs.days_remaining is not none and cs.days_remaining > 0 %}
+                  <span class="badge bg-success">
+                    <i class="bi bi-check-circle me-1"></i>Aktiv
+                  </span>
+                {% else %}
+                  <span class="badge bg-danger">Abgelaufen</span>
+                {% endif %}
+              </td>
+            </tr>
+          </tbody>
+        </table>
+
+        {% else %}
+        <div class="text-muted small">
+          <i class="bi bi-question-circle me-1"></i>
+          Kein Zertifikat vorhanden. Klicken Sie auf „Jetzt erneuern", um ein Zertifikat anzufordern.
+        </div>
+        {% endif %}
+
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- NGINX-Status -->
+{% if nginx_status %}
+<div class="card border-0 shadow-sm mb-3">
+  <div class="card-header bg-transparent fw-semibold">
+    <i class="bi bi-server me-1"></i>NGINX-Status
+  </div>
+  <div class="card-body py-2">
+    {% if nginx_status.running %}
+    <span class="badge bg-success me-2">
+      <i class="bi bi-check-circle me-1"></i>Läuft
+    </span>
+    <span class="text-muted small">PID {{ nginx_status.pid }}</span>
+    {% else %}
+    <span class="badge bg-danger me-2">
+      <i class="bi bi-x-circle me-1"></i>Nicht aktiv
+    </span>
+    {% if nginx_status.error %}
+    <span class="text-muted small">{{ nginx_status.error }}</span>
+    {% endif %}
+    {% endif %}
+  </div>
+</div>
+{% endif %}
+
+<!-- Hinweis -->
+<div class="alert alert-info py-2">
+  <i class="bi bi-info-circle me-1"></i>
+  Die Zertifikatsausstellung erfolgt durch Certbot als Root-Dienst (via install.sh eingerichtet).
+  Die Anwendung fordert die Erneuerung an – der Renewal-Cron übernimmt die Ausführung stündlich.
+</div>
+
+{% endif %}
+
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,409 @@
+{% extends "base.html" %}
+{% block title %}Analytics – {{ app_name }}{% endblock %}
+
+{% block content %}
+<div class="d-flex align-items-center justify-content-between mb-4">
+  <h4 class="fw-bold mb-0"><i class="bi bi-bar-chart-line me-2"></i>Analytics &amp; Reports</h4>
+  <div class="d-flex gap-2">
+    <a href="/analytics/export/certs.csv" class="btn btn-sm btn-outline-secondary">
+      <i class="bi bi-filetype-csv me-1"></i>Zertifikate CSV
+    </a>
+    {% if user.is_admin %}
+    <a href="/analytics/export/security.csv" class="btn btn-sm btn-outline-secondary">
+      <i class="bi bi-filetype-csv me-1"></i>Sicherheit CSV
+    </a>
+    {% endif %}
+  </div>
+</div>
+
+<!-- Nav Tabs -->
+<ul class="nav nav-tabs mb-4" id="analyticsTabs">
+  <li class="nav-item">
+    <a class="nav-link active" data-bs-toggle="tab" href="#tab-certs">
+      <i class="bi bi-patch-check me-1"></i>Zertifikate
+    </a>
+  </li>
+  {% if user.is_admin %}
+  <li class="nav-item">
+    <a class="nav-link" data-bs-toggle="tab" href="#tab-security">
+      <i class="bi bi-shield-lock me-1"></i>Sicherheit
+    </a>
+  </li>
+  <li class="nav-item">
+    <a class="nav-link" data-bs-toggle="tab" href="#tab-infra">
+      <i class="bi bi-server me-1"></i>Infrastruktur
+    </a>
+  </li>
+  {% endif %}
+</ul>
+
+<div class="tab-content">
+
+  <!-- ── Tab: Zertifikate ───────────────────────────────────────────────────── -->
+  <div class="tab-pane fade show active" id="tab-certs">
+
+    <!-- KPI-Karten -->
+    <div class="row g-3 mb-4">
+      {% set sc = cert_data.status_counts %}
+      <div class="col-6 col-md-3">
+        <div class="card border-0 shadow-sm text-center">
+          <div class="card-body">
+            <div class="fs-2 fw-bold">{{ cert_data.total }}</div>
+            <div class="text-muted small">Gesamt</div>
+          </div>
+        </div>
+      </div>
+      <div class="col-6 col-md-3">
+        <div class="card border-0 shadow-sm text-center">
+          <div class="card-body">
+            <div class="fs-2 fw-bold text-success">{{ sc.get('active', 0) }}</div>
+            <div class="text-muted small">Aktiv</div>
+          </div>
+        </div>
+      </div>
+      <div class="col-6 col-md-3">
+        <div class="card border-0 shadow-sm text-center">
+          <div class="card-body">
+            <div class="fs-2 fw-bold text-warning">{{ sc.get('expiring_soon', 0) }}</div>
+            <div class="text-muted small">Bald ablaufend</div>
+          </div>
+        </div>
+      </div>
+      <div class="col-6 col-md-3">
+        <div class="card border-0 shadow-sm text-center">
+          <div class="card-body">
+            <div class="fs-2 fw-bold text-danger">{{ sc.get('expired', 0) }}</div>
+            <div class="text-muted small">Abgelaufen</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="row g-3 mb-4">
+
+      <!-- Status-Donut -->
+      <div class="col-md-5">
+        <div class="card border-0 shadow-sm h-100">
+          <div class="card-header bg-transparent fw-semibold">Status-Verteilung</div>
+          <div class="card-body d-flex align-items-center justify-content-center" style="min-height:260px">
+            <canvas id="chartStatus" style="max-height:240px"></canvas>
+          </div>
+        </div>
+      </div>
+
+      <!-- Ablauf-Balken -->
+      <div class="col-md-7">
+        <div class="card border-0 shadow-sm h-100">
+          <div class="card-header bg-transparent fw-semibold">Ablauf-Verteilung</div>
+          <div class="card-body d-flex align-items-center" style="min-height:260px">
+            <canvas id="chartExpiry" style="max-height:240px;width:100%"></canvas>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <div class="row g-3">
+
+      <!-- Nach Aussteller -->
+      <div class="col-md-6">
+        <div class="card border-0 shadow-sm h-100">
+          <div class="card-header bg-transparent fw-semibold">Nach Aussteller</div>
+          <div class="card-body d-flex align-items-center" style="min-height:220px">
+            <canvas id="chartIssuers" style="max-height:200px;width:100%"></canvas>
+          </div>
+        </div>
+      </div>
+
+      <!-- Top Kunden -->
+      <div class="col-md-6">
+        <div class="card border-0 shadow-sm h-100">
+          <div class="card-header bg-transparent fw-semibold">Zertifikate je Kunde (Top 10)</div>
+          <div class="card-body p-0">
+            <table class="table table-sm mb-0">
+              <tbody>
+                {% for name, count in cert_data.top_customers %}
+                <tr>
+                  <td>{{ name }}</td>
+                  <td class="text-end fw-semibold">{{ count }}</td>
+                  <td style="width:40%">
+                    <div class="progress" style="height:6px">
+                      {% set max_c = cert_data.top_customers[0][1] if cert_data.top_customers else 1 %}
+                      <div class="progress-bar bg-primary" style="width:{{ (count / max_c * 100)|int }}%"></div>
+                    </div>
+                  </td>
+                </tr>
+                {% else %}
+                <tr><td class="text-muted" colspan="3">Keine Daten</td></tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  {% if user.is_admin %}
+  <!-- ── Tab: Sicherheit ────────────────────────────────────────────────────── -->
+  <div class="tab-pane fade" id="tab-security">
+    {% if security_data %}
+    <div class="row g-3 mb-4">
+      <div class="col-6 col-md-3">
+        <div class="card border-0 shadow-sm text-center">
+          <div class="card-body">
+            <div class="fs-2 fw-bold {% if security_data.mfa_pct < 80 %}text-warning{% else %}text-success{% endif %}">
+              {{ security_data.mfa_pct }}%
+            </div>
+            <div class="text-muted small">MFA-Abdeckung</div>
+            <div class="text-muted" style="font-size:.75rem">
+              {{ security_data.mfa_users }} / {{ security_data.total_users }} Benutzer
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="col-6 col-md-3">
+        <div class="card border-0 shadow-sm text-center">
+          <div class="card-body">
+            <div class="fs-2 fw-bold {% if security_data.login_failed > 0 %}text-warning{% else %}text-success{% endif %}">
+              {{ security_data.login_failed }}
+            </div>
+            <div class="text-muted small">Fehlgeschl. Logins (30 Tage)</div>
+          </div>
+        </div>
+      </div>
+      <div class="col-6 col-md-3">
+        <div class="card border-0 shadow-sm text-center">
+          <div class="card-body">
+            <div class="fs-2 fw-bold {% if security_data.critical_events > 0 %}text-warning{% else %}text-muted{% endif %}">
+              {{ security_data.critical_events }}
+            </div>
+            <div class="text-muted small">Kritische Ereignisse (30 Tage)</div>
+          </div>
+        </div>
+      </div>
+      <div class="col-6 col-md-3">
+        <div class="card border-0 shadow-sm text-center">
+          <div class="card-body">
+            {% set fb = security_data.fail2ban %}
+            {% if fb.error %}
+            <div class="fs-2 fw-bold text-muted">–</div>
+            {% else %}
+            <div class="fs-2 fw-bold {% if fb.jails %}text-success{% else %}text-muted{% endif %}">
+              {{ fb.jails | length }}
+            </div>
+            {% endif %}
+            <div class="text-muted small">Fail2ban Jails</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Sicherheitsereignisse Liniendiagramm -->
+    <div class="card border-0 shadow-sm mb-3">
+      <div class="card-header bg-transparent fw-semibold">Audit-Ereignisse (letzte 14 Tage)</div>
+      <div class="card-body" style="min-height:220px">
+        <canvas id="chartSecEvents" style="max-height:200px;width:100%"></canvas>
+      </div>
+    </div>
+
+    <!-- Fail2ban Jails -->
+    {% if not security_data.fail2ban.error %}
+    <div class="card border-0 shadow-sm">
+      <div class="card-header bg-transparent fw-semibold">
+        <i class="bi bi-shield-shaded me-1 text-warning"></i>Fail2ban
+      </div>
+      <div class="card-body">
+        {% if security_data.fail2ban.jails %}
+        <div class="d-flex flex-wrap gap-2">
+          {% for jail in security_data.fail2ban.jails %}
+          <a href="/security/fail2ban/{{ jail }}" class="badge bg-warning text-dark text-decoration-none">
+            {{ jail }}
+          </a>
+          {% endfor %}
+        </div>
+        {% else %}
+        <span class="text-muted small">Keine aktiven Jails.</span>
+        {% endif %}
+      </div>
+    </div>
+    {% endif %}
+    {% endif %}
+  </div>
+
+  <!-- ── Tab: Infrastruktur ─────────────────────────────────────────────────── -->
+  <div class="tab-pane fade" id="tab-infra">
+    <div class="row g-3">
+
+      <!-- Backups -->
+      {% if backup_data %}
+      <div class="col-md-6">
+        <div class="card border-0 shadow-sm h-100">
+          <div class="card-header bg-transparent fw-semibold">
+            <i class="bi bi-archive me-1"></i>Backups
+          </div>
+          <div class="card-body p-0">
+            <table class="table table-sm mb-0">
+              <tbody>
+                <tr><td class="text-muted w-50">Gesamt</td><td>{{ backup_data.total_count }}</td></tr>
+                <tr>
+                  <td class="text-muted">Letztes glob. Backup</td>
+                  <td>
+                    {% if backup_data.last_global_ok %}
+                    <span class="badge bg-success-subtle text-success-emphasis border border-success-subtle">OK</span>
+                    <span class="small text-muted ms-1">{{ backup_data.last_global_ok.created_at.strftime('%d.%m.%Y %H:%M') }}</span>
+                    {% else %}
+                    <span class="text-muted small">Noch kein Backup</span>
+                    {% endif %}
+                  </td>
+                </tr>
+                <tr><td class="text-muted">Nächster Lauf</td><td class="small">{{ backup_data.next_scheduled }}</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+      {% endif %}
+
+      <!-- Let's Encrypt -->
+      {% if le_status %}
+      <div class="col-md-6">
+        <div class="card border-0 shadow-sm h-100">
+          <div class="card-header bg-transparent fw-semibold">
+            <i class="bi bi-lock-fill me-1 text-success"></i>Let's Encrypt
+          </div>
+          <div class="card-body p-0">
+            {% if le_status.error %}
+            <div class="p-3 text-muted small">{{ le_status.error }}</div>
+            {% elif le_status.found %}
+            <table class="table table-sm mb-0">
+              <tbody>
+                <tr><td class="text-muted w-50">Domain</td><td class="font-monospace">{{ le_status.domain }}</td></tr>
+                <tr><td class="text-muted">Gültig bis</td>
+                  <td>{{ le_status.valid_until.strftime('%d.%m.%Y') if le_status.valid_until else '–' }}
+                    {% if le_status.days_remaining is not none %}
+                    <span class="badge {% if le_status.days_remaining <= 14 %}bg-danger{% elif le_status.days_remaining <= 30 %}bg-warning text-dark{% else %}bg-success{% endif %} ms-1">
+                      {{ le_status.days_remaining }}d
+                    </span>
+                    {% endif %}
+                  </td>
+                </tr>
+                <tr><td class="text-muted">Aussteller</td><td>{{ le_status.issuer or '–' }}</td></tr>
+              </tbody>
+            </table>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+      {% endif %}
+
+    </div>
+  </div>
+  {% endif %}
+
+</div>
+
+<!-- Chart.js -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+<script>
+const STATUS_LABELS = {
+  active: 'Aktiv', expiring_soon: 'Läuft ab', expired: 'Abgelaufen',
+  pending: 'Ausstehend', revoked: 'Widerrufen',
+};
+const STATUS_COLORS = {
+  active: '#198754', expiring_soon: '#ffc107', expired: '#dc3545',
+  pending: '#0dcaf0', revoked: '#6c757d',
+};
+
+// Status-Donut
+(function() {
+  const rawStatus = {{ cert_data.status_counts | tojson }};
+  const labels = Object.keys(rawStatus).map(k => STATUS_LABELS[k] || k);
+  const data = Object.values(rawStatus);
+  const colors = Object.keys(rawStatus).map(k => STATUS_COLORS[k] || '#adb5bd');
+  const ctx = document.getElementById('chartStatus');
+  if (ctx && data.some(v => v > 0)) {
+    new Chart(ctx, {
+      type: 'doughnut',
+      data: { labels, datasets: [{ data, backgroundColor: colors, borderWidth: 2 }] },
+      options: { responsive: true, plugins: { legend: { position: 'bottom' } } },
+    });
+  } else if (ctx) {
+    ctx.parentElement.innerHTML = '<div class="text-muted text-center py-4">Keine Daten</div>';
+  }
+})();
+
+// Ablauf-Balken
+(function() {
+  const buckets = {{ cert_data.expiry_buckets | tojson }};
+  const bColors = ['#dc3545','#dc3545','#ffc107','#0dcaf0','#198754','#198754','#6c757d'];
+  const ctx = document.getElementById('chartExpiry');
+  if (ctx) {
+    new Chart(ctx, {
+      type: 'bar',
+      data: {
+        labels: Object.keys(buckets),
+        datasets: [{ label: 'Zertifikate', data: Object.values(buckets),
+          backgroundColor: bColors, borderRadius: 4 }],
+      },
+      options: {
+        responsive: true,
+        plugins: { legend: { display: false } },
+        scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } } },
+      },
+    });
+  }
+})();
+
+// Aussteller
+(function() {
+  const issuers = {{ cert_data.issuer_counts | tojson }};
+  const ctx = document.getElementById('chartIssuers');
+  if (ctx && Object.keys(issuers).length > 0) {
+    new Chart(ctx, {
+      type: 'bar',
+      data: {
+        labels: Object.keys(issuers),
+        datasets: [{ label: 'Zertifikate', data: Object.values(issuers),
+          backgroundColor: '#0d6efd', borderRadius: 4 }],
+      },
+      options: {
+        indexAxis: 'y',
+        responsive: true,
+        plugins: { legend: { display: false } },
+        scales: { x: { beginAtZero: true, ticks: { stepSize: 1 } } },
+      },
+    });
+  }
+})();
+
+{% if user.is_admin and security_data %}
+// Sicherheitsereignisse über die Zeit
+(function() {
+  const eventsPerDay = {{ security_data.events_per_day | tojson }};
+  const ctx = document.getElementById('chartSecEvents');
+  if (ctx) {
+    new Chart(ctx, {
+      type: 'line',
+      data: {
+        labels: Object.keys(eventsPerDay),
+        datasets: [{
+          label: 'Ereignisse',
+          data: Object.values(eventsPerDay),
+          borderColor: '#0d6efd',
+          backgroundColor: 'rgba(13,110,253,0.1)',
+          tension: 0.3, fill: true,
+        }],
+      },
+      options: {
+        responsive: true,
+        plugins: { legend: { display: false } },
+        scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } } },
+      },
+    });
+  }
+})();
+{% endif %}
+</script>
+{% endblock %}

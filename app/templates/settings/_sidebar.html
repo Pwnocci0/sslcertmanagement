@@ -79,6 +79,21 @@
        class="list-group-item list-group-item-action py-2 {% if p.startswith('/security') %}active{% endif %}">
       <i class="bi bi-shield-lock me-2"></i>Sicherheit
     </a>
+
+    <a href="/letsencrypt"
+       class="list-group-item list-group-item-action py-2 {% if p.startswith('/letsencrypt') %}active{% endif %}">
+      <i class="bi bi-lock-fill me-2"></i>Let's Encrypt
+    </a>
+
+    <a href="/admin/audit"
+       class="list-group-item list-group-item-action py-2 {% if p == '/admin/audit' %}active{% endif %}">
+      <i class="bi bi-shield-check me-2"></i>Audit-Log
+    </a>
     {% endif %}
+
+    <a href="/analytics"
+       class="list-group-item list-group-item-action py-2 {% if p.startswith('/analytics') %}active{% endif %}">
+      <i class="bi bi-bar-chart-line me-2"></i>Analytics
+    </a>
   </div>
 </div>

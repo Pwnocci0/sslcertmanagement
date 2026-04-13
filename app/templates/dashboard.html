@@ -278,4 +278,77 @@
   </div>
 </div>
 
+<!-- ⑥ Grafiken ────────────────────────────────────────────────────────────── -->
+<div class="row g-3 mt-3">
+
+  <div class="col-md-5">
+    <div class="card border-0 shadow-sm h-100">
+      <div class="card-header bg-white fw-semibold border-bottom">
+        <i class="bi bi-pie-chart me-1 text-primary"></i>Zertifikatsstatus
+      </div>
+      <div class="card-body d-flex align-items-center justify-content-center" style="min-height:200px">
+        <canvas id="dashStatusChart" style="max-height:180px"></canvas>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-md-7">
+    <div class="card border-0 shadow-sm h-100">
+      <div class="card-header bg-white fw-semibold border-bottom d-flex align-items-center justify-content-between">
+        <span><i class="bi bi-clock me-1 text-warning"></i>Ablauf-Übersicht</span>
+        <a href="/analytics" class="btn btn-sm btn-outline-secondary py-0">Details</a>
+      </div>
+      <div class="card-body d-flex align-items-center" style="min-height:200px">
+        <canvas id="dashExpiryChart" style="max-height:180px;width:100%"></canvas>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+<script>
+(function() {
+  const s = {{ stats | tojson }};
+  const labels = ['Aktiv', 'Läuft ab', 'Abgelaufen', 'Ausstehend', 'Widerrufen'];
+  const data = [s.certs_active, s.certs_expiring, s.certs_expired, s.certs_pending, s.certs_revoked];
+  const colors = ['#198754','#ffc107','#dc3545','#0dcaf0','#6c757d'];
+  const ctx = document.getElementById('dashStatusChart');
+  if (ctx) {
+    new Chart(ctx, {
+      type: 'doughnut',
+      data: { labels, datasets: [{ data, backgroundColor: colors, borderWidth: 2 }] },
+      options: { responsive: true, plugins: { legend: { position: 'bottom', labels: { boxWidth: 12 } } } },
+    });
+  }
+})();
+(function() {
+  const s = {{ stats | tojson }};
+  const exp14 = s.exp_14;
+  const exp14_30 = s.exp_30 - s.exp_14;
+  const exp30_60 = s.exp_60 - s.exp_30;
+  const over60 = Math.max(0, s.certs_active - s.exp_60);
+  const ctx = document.getElementById('dashExpiryChart');
+  if (ctx) {
+    new Chart(ctx, {
+      type: 'bar',
+      data: {
+        labels: ['< 14 Tage', '14–30 Tage', '30–60 Tage', '> 60 Tage'],
+        datasets: [{
+          label: 'Zertifikate',
+          data: [exp14, exp14_30, exp30_60, over60],
+          backgroundColor: ['#dc3545','#ffc107','#0dcaf0','#198754'],
+          borderRadius: 4,
+        }],
+      },
+      options: {
+        responsive: true,
+        plugins: { legend: { display: false } },
+        scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } } },
+      },
+    });
+  }
+})();
+</script>
+
 {% endblock %}

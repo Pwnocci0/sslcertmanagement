@@ -10,9 +10,9 @@ from starlette.middleware.sessions import SessionMiddleware
 
 from .database import Base, engine
 from .routers import (
-    admin, auth, backups, certificates, csrs, csrtemplates, customer_groups, customers,
-    dashboard, domains, exports, mail_settings, mailtemplates, mfa, notifications,
-    profile, report, security, settings, stepup, tasks, thesslstore,
+    admin, analytics, auth, backups, certificates, csrs, csrtemplates, customer_groups,
+    customers, dashboard, domains, exports, letsencrypt, mail_settings, mailtemplates,
+    mfa, notifications, profile, report, security, settings, stepup, tasks, thesslstore,
 )
 from .scheduler import shutdown_scheduler, start_scheduler, trigger_cert_status_update
 from .templates_config import templates as _jinja_templates
@@ -122,6 +122,8 @@ app.include_router(backups.router)
 app.include_router(profile.router)
 app.include_router(report.router)
 app.include_router(security.router)
+app.include_router(letsencrypt.router)
+app.include_router(analytics.router)
 
 # Tabellen beim Start anlegen (nur für SQLite-Dev, nicht für Produktions-Migrations-Workflow)
 Base.metadata.create_all(bind=engine)

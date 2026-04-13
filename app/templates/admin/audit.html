@@ -1,0 +1,178 @@
+{% extends "base.html" %}
+{% block title %}Audit-Log – {{ app_name }}{% endblock %}
+
+{% block content %}
+<div class="row g-4">
+  {% include "settings/_sidebar.html" %}
+  <div class="col-lg-10 col-md-9">
+
+<div class="d-flex align-items-center mb-3 gap-2">
+  <i class="bi bi-shield-check fs-3 text-primary"></i>
+  <h4 class="mb-0">Audit-Log</h4>
+  <div class="ms-auto d-flex gap-2">
+    <a href="/admin/audit/export.csv?category={{ f_category }}&action={{ f_action }}&user={{ f_user }}&ip={{ f_ip }}&date_from={{ f_date_from }}&date_to={{ f_date_to }}"
+       class="btn btn-sm btn-outline-secondary">
+      <i class="bi bi-filetype-csv me-1"></i>CSV
+    </a>
+    <a href="/admin/audit/export.json?category={{ f_category }}&action={{ f_action }}&user={{ f_user }}&ip={{ f_ip }}&date_from={{ f_date_from }}&date_to={{ f_date_to }}"
+       class="btn btn-sm btn-outline-secondary">
+      <i class="bi bi-filetype-json me-1"></i>JSON
+    </a>
+  </div>
+</div>
+
+<!-- Filter -->
+<form method="get" action="/admin/audit" class="card border-0 shadow-sm mb-3">
+  <div class="card-body py-2">
+    <div class="row g-2 align-items-end">
+
+      <div class="col-sm-auto">
+        <label class="form-label small mb-1">Kategorie</label>
+        <select name="category" class="form-select form-select-sm">
+          {% for k, v in categories.items() %}
+          <option value="{{ k }}" {% if f_category == k %}selected{% endif %}>{{ v }}</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div class="col-sm-auto">
+        <label class="form-label small mb-1">Aktion</label>
+        <input type="text" name="action" class="form-control form-control-sm"
+               value="{{ f_action }}" placeholder="z. B. csr.created" style="width:160px">
+      </div>
+
+      <div class="col-sm-auto">
+        <label class="form-label small mb-1">Benutzer</label>
+        <input type="text" name="user" class="form-control form-control-sm"
+               value="{{ f_user }}" placeholder="Benutzername" style="width:130px">
+      </div>
+
+      <div class="col-sm-auto">
+        <label class="form-label small mb-1">IP-Adresse</label>
+        <input type="text" name="ip" class="form-control form-control-sm"
+               value="{{ f_ip }}" placeholder="1.2.3.4" style="width:120px">
+      </div>
+
+      <div class="col-sm-auto">
+        <label class="form-label small mb-1">Von</label>
+        <input type="date" name="date_from" class="form-control form-control-sm"
+               value="{{ f_date_from }}">
+      </div>
+
+      <div class="col-sm-auto">
+        <label class="form-label small mb-1">Bis</label>
+        <input type="date" name="date_to" class="form-control form-control-sm"
+               value="{{ f_date_to }}">
+      </div>
+
+      <div class="col-sm-auto d-flex gap-1">
+        <button type="submit" class="btn btn-sm btn-primary">
+          <i class="bi bi-search me-1"></i>Filtern
+        </button>
+        <a href="/admin/audit" class="btn btn-sm btn-outline-secondary">
+          <i class="bi bi-x"></i>
+        </a>
+      </div>
+
+    </div>
+  </div>
+</form>
+
+<!-- Ergebnis-Infos -->
+<div class="d-flex align-items-center mb-2 text-muted small">
+  <span>{{ total }} Einträge gefunden</span>
+  {% if total_pages > 1 %}
+  <span class="ms-2">– Seite {{ page }} / {{ total_pages }}</span>
+  {% endif %}
+</div>
+
+{% if entries %}
+<div class="table-responsive">
+  <table class="table table-sm table-hover align-middle small">
+    <thead class="table-dark">
+      <tr>
+        <th>Zeitstempel</th>
+        <th>Benutzer</th>
+        <th>Aktion</th>
+        <th>Entität</th>
+        <th>IP</th>
+        <th>Details</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for e in entries %}
+      <tr>
+        <td class="text-nowrap text-muted">
+          {{ e.created_at.strftime('%d.%m.%Y %H:%M:%S') }}
+        </td>
+        <td>
+          {% if e.user %}
+          <span class="fw-semibold">{{ e.user.username }}</span>
+          <span class="text-muted ms-1 small">({{ e.user.role }})</span>
+          {% else %}
+          <span class="text-muted">–</span>
+          {% endif %}
+        </td>
+        <td>
+          <code class="small">{{ e.action }}</code>
+        </td>
+        <td class="text-muted">
+          {{ e.entity_type }}{% if e.entity_id %} #{{ e.entity_id }}{% endif %}
+        </td>
+        <td class="font-monospace text-muted small">{{ e.ip_address or '–' }}</td>
+        <td>
+          {% if e._details_parsed %}
+          <span class="text-muted small">
+            {% for k, v in e._details_parsed.items() %}
+            <span class="badge bg-light text-dark border">{{ k }}: {{ v }}</span>
+            {% endfor %}
+          </span>
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<!-- Pagination -->
+{% if total_pages > 1 %}
+<nav>
+  <ul class="pagination pagination-sm justify-content-center">
+    {% if page > 1 %}
+    <li class="page-item">
+      <a class="page-link" href="?category={{ f_category }}&action={{ f_action }}&user={{ f_user }}&ip={{ f_ip }}&date_from={{ f_date_from }}&date_to={{ f_date_to }}&page={{ page - 1 }}">
+        &laquo;
+      </a>
+    </li>
+    {% endif %}
+    {% for p in range([1, page - 2]|max, [total_pages + 1, page + 3]|min) %}
+    <li class="page-item {% if p == page %}active{% endif %}">
+      <a class="page-link" href="?category={{ f_category }}&action={{ f_action }}&user={{ f_user }}&ip={{ f_ip }}&date_from={{ f_date_from }}&date_to={{ f_date_to }}&page={{ p }}">
+        {{ p }}
+      </a>
+    </li>
+    {% endfor %}
+    {% if page < total_pages %}
+    <li class="page-item">
+      <a class="page-link" href="?category={{ f_category }}&action={{ f_action }}&user={{ f_user }}&ip={{ f_ip }}&date_from={{ f_date_from }}&date_to={{ f_date_to }}&page={{ page + 1 }}">
+        &raquo;
+      </a>
+    </li>
+    {% endif %}
+  </ul>
+</nav>
+{% endif %}
+
+{% else %}
+<div class="card border-0 shadow-sm">
+  <div class="card-body text-center py-5 text-muted">
+    <i class="bi bi-journal-x fs-1 mb-3 d-block"></i>
+    Keine Einträge gefunden.
+  </div>
+</div>
+{% endif %}
+
+  </div>
+</div>
+{% endblock %}

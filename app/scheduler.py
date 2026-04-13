@@ -14,6 +14,50 @@ logger = logging.getLogger(__name__)
 _scheduler: BackgroundScheduler | None = None
 
 
+def _run_le_renewal_check() -> None:
+    """Prüft ob das Let's Encrypt Zertifikat erneuert werden muss."""
+    logger.debug("Let's-Encrypt-Renewal-Check gestartet.")
+    try:
+        from .database import SessionLocal
+        from .settings_service import get_settings_service
+        from .services.letsencrypt import (
+            get_cert_status, is_local_nginx, request_renewal,
+        )
+
+        if not is_local_nginx():
+            return
+
+        db = SessionLocal()
+        try:
+            svc = get_settings_service(db)
+            if not svc.get_bool("letsencrypt.enabled", default=False):
+                return
+            if not svc.get_bool("letsencrypt.auto_renew", default=True):
+                return
+
+            domain = svc.get_str("letsencrypt.domain", default="")
+            if not domain:
+                return
+
+            status = get_cert_status(domain)
+            if not status.get("found"):
+                return
+
+            days = status.get("days_remaining")
+            if days is not None and days <= 30:
+                logger.info(
+                    "LE-Zertifikat für %s läuft in %d Tagen ab – Renewal-Anforderung wird gesetzt.",
+                    domain, days,
+                )
+                ok, msg = request_renewal(domain)
+                if not ok:
+                    logger.warning("LE-Renewal-Trigger fehlgeschlagen: %s", msg)
+        finally:
+            db.close()
+    except Exception:
+        logger.exception("Unerwarteter Fehler beim LE-Renewal-Check.")
+
+
 def _run_security_cleanup() -> None:
     """Löscht alte Login-Versuche und inaktive Sitzungen."""
     logger.info("Security-Cleanup gestartet.")
@@ -196,6 +240,15 @@ def start_scheduler() -> None:
         hour=0,
         minute=30,
         id="cert_status_update",
+        replace_existing=True,
+        misfire_grace_time=3600,
+    )
+    _scheduler.add_job(
+        _run_le_renewal_check,
+        trigger="cron",
+        hour=3,
+        minute=0,
+        id="le_renewal_check",
         replace_existing=True,
         misfire_grace_time=3600,
     )

@@ -595,6 +595,72 @@ NGXEOF
 
     nginx -t -q && nginx -s reload 2>/dev/null || true
 
+    # ─── Let's-Encrypt-Renewal-Trigger einrichten ────────────────────────────
+    step "Let's-Encrypt-Renewal-Trigger einrichten"
+
+    LE_TRIGGER_DIR="/var/lib/certmgr-le"
+    LE_TRIGGER_FILE="$LE_TRIGGER_DIR/renew-requested"
+    LE_RENEW_SCRIPT="/usr/local/sbin/certmgr-le-renew.sh"
+
+    # Trigger-Verzeichnis: certmgr darf schreiben, root liest
+    mkdir -p "$LE_TRIGGER_DIR"
+    chown "root:$APP_USER" "$LE_TRIGGER_DIR"
+    chmod 770 "$LE_TRIGGER_DIR"
+    info "Trigger-Verzeichnis $LE_TRIGGER_DIR erstellt."
+
+    # Renewal-Skript (läuft als root via Cron)
+    cat > "$LE_RENEW_SCRIPT" << 'RENEWEOF'
+#!/usr/bin/env bash
+# Certmgr Let's-Encrypt Renewal-Skript (von install.sh generiert)
+# Wird stündlich als root via Cron aufgerufen.
+set -euo pipefail
+
+TRIGGER="/var/lib/certmgr-le/renew-requested"
+LOG="/var/log/certmgr-le-renew.log"
+NGINX_PID_FILE="/run/nginx.pid"
+
+log() { echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*" | tee -a "$LOG"; }
+
+if [[ ! -f "$TRIGGER" ]]; then
+    exit 0
+fi
+
+DOMAIN=$(head -1 "$TRIGGER" || true)
+DOMAIN="${DOMAIN// /}"
+if [[ -z "$DOMAIN" ]]; then
+    log "Trigger-Datei leer oder ungültig – wird entfernt."
+    rm -f "$TRIGGER"
+    exit 0
+fi
+
+log "Renewal angefordert für: $DOMAIN"
+rm -f "$TRIGGER"
+
+# Certbot ausführen
+if certbot renew --nginx --non-interactive --quiet 2>&1 | tee -a "$LOG"; then
+    log "Certbot renew erfolgreich."
+else
+    log "Certbot renew fehlgeschlagen – exit $?."
+    exit 1
+fi
+
+# NGINX neu laden
+if [[ -f "$NGINX_PID_FILE" ]]; then
+    nginx -s reload && log "NGINX neu geladen." || log "NGINX reload fehlgeschlagen."
+fi
+RENEWEOF
+
+    chmod 750 "$LE_RENEW_SCRIPT"
+    chown root:root "$LE_RENEW_SCRIPT"
+    info "Renewal-Skript $LE_RENEW_SCRIPT erstellt."
+
+    # Stündlichen Root-Cron einrichten
+    CRON_ENTRY="15 * * * * root $LE_RENEW_SCRIPT"
+    CRON_FILE="/etc/cron.d/certmgr-le-renew"
+    echo "$CRON_ENTRY" > "$CRON_FILE"
+    chmod 644 "$CRON_FILE"
+    info "Cron-Job $CRON_FILE eingerichtet (stündlich um :15)."
+
     if [[ "$HTTPS_ENABLED" == "true" ]]; then
         APP_URL="https://${DOMAIN}"
     else

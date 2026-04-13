@@ -60,6 +60,7 @@ CATEGORY_LABELS = {
     "thesslstore":  "TheSSLStore API",
     "smtp":         "E-Mail / SMTP",
     "maintenance":  "Wartung",
+    "letsencrypt":  "Let's Encrypt",
 }
 
 # Sichtbare Kategorien für Techniker (read-only; Admins sehen alle)
@@ -146,6 +147,38 @@ DEFINITIONS: dict[str, SettingDef] = {
         value_type="int", category="security", is_sensitive=False,
         label="Step-up Gültigkeitsdauer (Sekunden)",
         description="Wie lange ein Step-up-Token nach Bestätigung gültig ist (60–3600).",
+    ),
+
+    # ── Let's Encrypt ─────────────────────────────────────────────────────────
+    "letsencrypt.enabled": SettingDef(
+        default="false",
+        value_type="bool", category="letsencrypt", is_sensitive=False,
+        label="Let's Encrypt aktivieren",
+        description="Automatische TLS-Zertifikate via Let's Encrypt (nur bei lokalem NGINX, Modus A).",
+    ),
+    "letsencrypt.domain": SettingDef(
+        default="",
+        value_type="string", category="letsencrypt", is_sensitive=False,
+        label="Domain",
+        description="Domain für das Let's Encrypt Zertifikat (z. B. ssl.example.de).",
+    ),
+    "letsencrypt.email": SettingDef(
+        default="",
+        value_type="string", category="letsencrypt", is_sensitive=False,
+        label="E-Mail (ACME)",
+        description="Kontakt-E-Mail für Let's Encrypt Ablauf-Benachrichtigungen.",
+    ),
+    "letsencrypt.staging": SettingDef(
+        default="true",
+        value_type="bool", category="letsencrypt", is_sensitive=False,
+        label="Staging-Umgebung",
+        description="Let's Encrypt Staging nutzen (keine echten Rate Limits, für Tests geeignet).",
+    ),
+    "letsencrypt.auto_renew": SettingDef(
+        default="true",
+        value_type="bool", category="letsencrypt", is_sensitive=False,
+        label="Automatische Verlängerung",
+        description="Zertifikat wird automatisch 30 Tage vor Ablauf verlängert.",
     ),
 
     # ── Netzwerk ──────────────────────────────────────────────────────────────

@@ -53,7 +53,13 @@ All routes call `login_required()` manually (no FastAPI dependency injection mid
 
 **MFA secrets** are Fernet-encrypted (key derived from `APP_SECRET_KEY`). Recovery codes are stored as HMAC-SHA256 hashes, never plaintext.
 
-**Audit logging** (`app/audit.py`): all significant user actions are written to the `audit_logs` table.
+**Audit logging** (`app/audit.py`): all significant user actions are written to the `audit_logs` table. `/admin/audit` provides a filterable UI with CSV/JSON export (admin only).
+
+**Let's Encrypt integration** (`app/services/letsencrypt.py`, `app/routers/letsencrypt.py`): reads cert status from `/etc/letsencrypt/live/`. **Never calls certbot as subprocess** — instead writes `/var/lib/certmgr-le/renew-requested` (trigger file); `install.sh` installs a root cron job at `:15` every hour that reads this file and runs `certbot renew --nginx`. Only active when `APP_INSTALL_MODE=A`. Auto-renewal check runs daily at 03:00 UTC via APScheduler.
+
+**Analytics** (`app/routers/analytics.py`): `/analytics` endpoint with Chart.js charts (status donut, expiry bars, issuer bar, security events line). Non-admins see cert data only (filtered by accessible customers); admins additionally see security stats and backup info. CSV export at `/analytics/export/certs.csv` and `/analytics/export/security.csv`.
+
+**Scheduler** (`app/scheduler.py`): APScheduler `BackgroundScheduler` with jobs: notification check (hourly), cert status update (00:30 UTC), daily backup (00:05 UTC), log cleanup (01:00 UTC), security cleanup (02:00 UTC), LE renewal check (03:00 UTC).
 
 **Routers** (`app/routers/`): one file per entity/feature. Templates are in `app/templates/`. Static assets in `static/`.
 
@@ -67,7 +73,13 @@ All routes call `login_required()` manually (no FastAPI dependency injection mid
 ## Deployment
 
 `install.sh` sets up a systemd service (`certmgr`) running as the `certmgr` user. Two modes:
-- **Mode 1:** Local Nginx + Let's Encrypt
-- **Mode 2:** External reverse proxy (generates Nginx config template at `deploy/external-nginx-example.conf`)
+- **Mode A** (`APP_INSTALL_MODE=A`): Local Nginx + Let's Encrypt. Creates `/var/lib/certmgr-le/` (group-writable by `certmgr`) and installs `/etc/cron.d/certmgr-le-renew` for root-level certbot runs.
+- **Mode B**: External reverse proxy (generates Nginx config template at `deploy/external-nginx-example.conf`)
 
 Logs go to `data/app.log` (rotating, 5 MB × 5 files).
+
+## System Requirements
+
+- Python 3.11+, `cryptography` ≥ 44.0 (for `cert.not_valid_before_utc` / `not_valid_after_utc`)
+- Mode A only: `nginx`, `certbot`, `python3-certbot-nginx`; `/var/lib/certmgr-le/` writable by `certmgr` group
+- Optional: `fail2ban` (sqlite3 DB at `/var/lib/fail2ban/fail2ban.sqlite3`) for security dashboard

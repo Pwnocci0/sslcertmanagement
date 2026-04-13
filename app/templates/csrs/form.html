@@ -236,6 +236,30 @@ document.getElementById('country').addEventListener('input', function() {
   this.value = this.value.toUpperCase();
 });
 
+// Kunden-Defaults: beim Auswählen eines Kunden die Subject-Felder befüllen
+const CUSTOMER_DEFAULTS = {
+  {% for c in customers %}{% if c.defaults %}
+  {{ c.id }}: {
+    country: {{ (c.defaults.default_country or '') | tojson }},
+    state: {{ (c.defaults.default_state or '') | tojson }},
+    locality: {{ (c.defaults.default_locality or '') | tojson }},
+    organization: {{ (c.defaults.default_org or '') | tojson }},
+    ou: {{ (c.defaults.default_ou or '') | tojson }},
+  },
+  {% endif %}{% endfor %}
+};
+
+document.getElementById('customer_id').addEventListener('change', function() {
+  const id = parseInt(this.value);
+  if (!id || !CUSTOMER_DEFAULTS[id]) return;
+  const d = CUSTOMER_DEFAULTS[id];
+  if (d.country)      document.getElementById('country').value = d.country;
+  if (d.state)        document.getElementById('state').value = d.state;
+  if (d.locality)     document.getElementById('locality').value = d.locality;
+  if (d.organization) document.getElementById('organization').value = d.organization;
+  if (d.ou)           document.getElementById('ou').value = d.ou;
+});
+
 {% if csr_templates %}
 // Eingebettete Vorlagendaten für clientseitiges Prefill
 const CSR_TEMPLATES = {

@@ -62,6 +62,11 @@
             <i class="bi bi-list-check me-1"></i>Aufgaben
           </a>
         </li>
+        <li class="nav-item">
+          <a class="nav-link {% if request.url.path.startswith('/analytics') %}active{% endif %}" href="/analytics">
+            <i class="bi bi-bar-chart-line me-1"></i>Analytics
+          </a>
+        </li>
       </ul>
 
       <!-- Rechte Seite -->

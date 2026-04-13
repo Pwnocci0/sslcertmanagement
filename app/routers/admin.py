@@ -2,15 +2,18 @@
 from __future__ import annotations
 
 import collections
+import csv
+import io
+import json
 import os
 import platform
 import re
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Optional
 
 from fastapi import APIRouter, Depends, Form, Query, Request
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, RedirectResponse, StreamingResponse
 from sqlalchemy.orm import Session
 
 from .. import audit, models
@@ -135,6 +138,19 @@ def _collect_status(db: Session) -> dict:
     if not secret or "dev-secret" in secret or "CHANGE" in secret:
         warnings.append("APP_SECRET_KEY ist noch der Entwicklungs-Standardwert!")
 
+    # ── Let's Encrypt + NGINX ─────────────────────────────────────────────────
+    le_enabled = svc.get_bool("letsencrypt.enabled", default=False)
+    le_domain  = svc.get_str("letsencrypt.domain", default="")
+    le_status  = None
+    nginx_status = None
+    install_mode = os.getenv("APP_INSTALL_MODE", "").strip().upper()
+
+    if install_mode == "A":
+        from ..services.letsencrypt import get_cert_status, get_nginx_status
+        nginx_status = get_nginx_status()
+        if le_enabled and le_domain:
+            le_status = get_cert_status(le_domain)
+
     # ── Neue Status-Abschnitte (caching-fähig) ────────────────────────────────
     db_info   = get_database_info()
     storage   = get_storage_breakdown()
@@ -168,6 +184,12 @@ def _collect_status(db: Session) -> dict:
         "backups":           backups,
         "log_info":          log_info,
         "retention_days":    retention_days,
+        # Let's Encrypt + NGINX
+        "le_enabled":        le_enabled,
+        "le_domain":         le_domain,
+        "le_status":         le_status,
+        "nginx_status":      nginx_status,
+        "install_mode":      install_mode,
     }
 
 
@@ -610,3 +632,198 @@ async def user_toggle_active(user_id: int, request: Request, db: Session = Depen
     set_flash(request, "success" if edit_user.is_active else "warning",
               f'Benutzer "{edit_user.username}" wurde {action}.')
     return RedirectResponse(url="/admin/users", status_code=302)
+
+
+# ── Audit-Log-Viewer ─────────────────────────────────────────────────────────
+
+_AUDIT_PAGE_SIZE = 100
+
+# Bekannte Aktionskategorien für den Filter
+AUDIT_CATEGORIES = {
+    "all": "Alle",
+    "auth": "Anmeldung / Sitzung",
+    "user": "Benutzer",
+    "cert": "Zertifikate",
+    "csr": "CSRs",
+    "backup": "Backups",
+    "security": "Sicherheit",
+    "letsencrypt": "Let's Encrypt",
+    "admin": "Administration",
+}
+
+_AUDIT_CATEGORY_PREFIXES = {
+    "auth": ("login.", "logout.", "mfa.", "session.", "stepup."),
+    "user": ("user.",),
+    "cert": ("cert.", "certificate."),
+    "csr": ("csr.",),
+    "backup": ("backup.",),
+    "security": ("security.", "letsencrypt.",),
+    "letsencrypt": ("letsencrypt.",),
+    "admin": ("admin.", "settings.",),
+}
+
+
+def _filter_audit_query(q, category: str, action_filter: str, user_filter: str,
+                        ip_filter: str, date_from: str, date_to: str):
+    if category and category != "all" and category in _AUDIT_CATEGORY_PREFIXES:
+        prefixes = _AUDIT_CATEGORY_PREFIXES[category]
+        import sqlalchemy
+        q = q.filter(
+            sqlalchemy.or_(
+                *[models.AuditLog.action.like(f"{p}%") for p in prefixes]
+            )
+        )
+    if action_filter:
+        q = q.filter(models.AuditLog.action.ilike(f"%{action_filter}%"))
+    if user_filter:
+        q = q.join(models.AuditLog.user, isouter=True).filter(
+            models.User.username.ilike(f"%{user_filter}%")
+        )
+    if ip_filter:
+        q = q.filter(models.AuditLog.ip_address.ilike(f"%{ip_filter}%"))
+    if date_from:
+        try:
+            q = q.filter(models.AuditLog.created_at >= datetime.strptime(date_from, "%Y-%m-%d"))
+        except ValueError:
+            pass
+    if date_to:
+        try:
+            q = q.filter(
+                models.AuditLog.created_at < datetime.strptime(date_to, "%Y-%m-%d") + timedelta(days=1)
+            )
+        except ValueError:
+            pass
+    return q
+
+
+@router.get("/audit", response_class=HTMLResponse)
+async def admin_audit(
+    request: Request,
+    db: Session = Depends(get_db),
+    category: str = Query(default="all"),
+    action: str = Query(default=""),
+    user_filter: str = Query(default="", alias="user"),
+    ip: str = Query(default=""),
+    date_from: str = Query(default=""),
+    date_to: str = Query(default=""),
+    page: int = Query(default=1, ge=1),
+):
+    redirect, user = _require_admin(request, db)
+    if redirect:
+        return redirect
+
+    q = db.query(models.AuditLog).order_by(models.AuditLog.created_at.desc())
+    q = _filter_audit_query(q, category, action, user_filter, ip, date_from, date_to)
+
+    total = q.count()
+    offset = (page - 1) * _AUDIT_PAGE_SIZE
+    entries = q.offset(offset).limit(_AUDIT_PAGE_SIZE).all()
+
+    # Details-JSON parsen für Anzeige
+    for e in entries:
+        try:
+            e._details_parsed = json.loads(e.details or "{}")
+        except Exception:
+            e._details_parsed = {}
+
+    total_pages = max(1, (total + _AUDIT_PAGE_SIZE - 1) // _AUDIT_PAGE_SIZE)
+
+    return templates.TemplateResponse(
+        "admin/audit.html",
+        {
+            "request": request, "user": user,
+            "entries": entries,
+            "total": total, "page": page, "total_pages": total_pages,
+            "page_size": _AUDIT_PAGE_SIZE,
+            "categories": AUDIT_CATEGORIES,
+            "f_category": category, "f_action": action,
+            "f_user": user_filter, "f_ip": ip,
+            "f_date_from": date_from, "f_date_to": date_to,
+            "flash": pop_flash(request),
+        },
+    )
+
+
+@router.get("/audit/export.csv")
+async def audit_export_csv(
+    request: Request,
+    db: Session = Depends(get_db),
+    category: str = Query(default="all"),
+    action: str = Query(default=""),
+    user_filter: str = Query(default="", alias="user"),
+    ip: str = Query(default=""),
+    date_from: str = Query(default=""),
+    date_to: str = Query(default=""),
+):
+    redirect, user = _require_admin(request, db)
+    if redirect:
+        return redirect
+
+    q = db.query(models.AuditLog).order_by(models.AuditLog.created_at.desc())
+    q = _filter_audit_query(q, category, action, user_filter, ip, date_from, date_to)
+    entries = q.limit(10000).all()
+
+    buf = io.StringIO()
+    writer = csv.writer(buf)
+    writer.writerow(["Zeitstempel", "Benutzer", "Rolle", "Aktion", "Entität",
+                     "Entität-ID", "IP-Adresse", "Details"])
+    for e in entries:
+        writer.writerow([
+            e.created_at.strftime("%Y-%m-%d %H:%M:%S"),
+            e.user.username if e.user else "",
+            e.user.role if e.user else "",
+            e.action, e.entity_type, e.entity_id or "",
+            e.ip_address or "", e.details or "",
+        ])
+    buf.seek(0)
+    return StreamingResponse(
+        iter([buf.getvalue()]),
+        media_type="text/csv",
+        headers={"Content-Disposition": "attachment; filename=audit-log.csv"},
+    )
+
+
+@router.get("/audit/export.json")
+async def audit_export_json(
+    request: Request,
+    db: Session = Depends(get_db),
+    category: str = Query(default="all"),
+    action: str = Query(default=""),
+    user_filter: str = Query(default="", alias="user"),
+    ip: str = Query(default=""),
+    date_from: str = Query(default=""),
+    date_to: str = Query(default=""),
+):
+    redirect, user = _require_admin(request, db)
+    if redirect:
+        return redirect
+
+    q = db.query(models.AuditLog).order_by(models.AuditLog.created_at.desc())
+    q = _filter_audit_query(q, category, action, user_filter, ip, date_from, date_to)
+    entries = q.limit(10000).all()
+
+    data = []
+    for e in entries:
+        try:
+            details = json.loads(e.details or "{}")
+        except Exception:
+            details = {}
+        data.append({
+            "timestamp": e.created_at.strftime("%Y-%m-%dT%H:%M:%S"),
+            "user": e.user.username if e.user else None,
+            "role": e.user.role if e.user else None,
+            "action": e.action,
+            "entity_type": e.entity_type,
+            "entity_id": e.entity_id,
+            "ip_address": e.ip_address,
+            "details": details,
+        })
+
+    buf = io.StringIO()
+    json.dump(data, buf, ensure_ascii=False, indent=2)
+    buf.seek(0)
+    return StreamingResponse(
+        iter([buf.getvalue()]),
+        media_type="application/json",
+        headers={"Content-Disposition": "attachment; filename=audit-log.json"},
+    )
