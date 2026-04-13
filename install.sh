@@ -712,28 +712,33 @@ backend  = systemd
 enabled = true
 FAIL2BAN_EOF
 
+    # fail2ban-Gruppe anlegen und certmgr hinzufügen
+    groupadd --system fail2ban 2>/dev/null || true
+    usermod -aG fail2ban "$APP_USER"
+    info "Benutzer $APP_USER zur Gruppe fail2ban hinzugefügt."
+
+    # systemd Drop-in: Socket-Gruppe nach Start auf fail2ban setzen
+    F2B_DROPIN_DIR="/etc/systemd/system/fail2ban.service.d"
+    mkdir -p "$F2B_DROPIN_DIR"
+    cat > "${F2B_DROPIN_DIR}/socket-group.conf" <<'F2B_DROPIN_EOF'
+[Service]
+# Socket nach dem Start für die fail2ban-Gruppe freigeben (read-write)
+ExecStartPost=/bin/bash -c \
+  'for i in 1 2 3 4 5; do \
+     [ -S /var/run/fail2ban/fail2ban.sock ] && break || sleep 1; \
+   done; \
+   chgrp fail2ban /var/run/fail2ban/fail2ban.sock && \
+   chmod g+rw /var/run/fail2ban/fail2ban.sock'
+F2B_DROPIN_EOF
+    info "systemd Drop-in angelegt (${F2B_DROPIN_DIR}/socket-group.conf)."
+
+    systemctl daemon-reload
     systemctl enable fail2ban --quiet
     systemctl restart fail2ban
     if systemctl is-active --quiet fail2ban; then
         info "fail2ban gestartet (SSH-Jail aktiv, Banzeit 30 min, 5 Versuche in 10 min)."
     else
         warn "fail2ban konnte nicht gestartet werden. Prüfe: systemctl status fail2ban"
-    fi
-
-    # Sudoers-Regel: certmgr darf fail2ban-client status (read-only) ohne Passwort
-    F2B_BIN="$(command -v fail2ban-client 2>/dev/null || echo /usr/bin/fail2ban-client)"
-    SUDOERS_FILE="/etc/sudoers.d/certmgr-fail2ban"
-    cat > "$SUDOERS_FILE" <<SUDOERS_EOF
-# Erlaubt dem certmgr-Dienst, den fail2ban-Status abzufragen (read-only)
-${APP_USER} ALL=(root) NOPASSWD: ${F2B_BIN} status, ${F2B_BIN} status *
-SUDOERS_EOF
-    chmod 440 "$SUDOERS_FILE"
-    # Syntax prüfen
-    if visudo -cf "$SUDOERS_FILE" >/dev/null 2>&1; then
-        info "Sudoers-Regel für fail2ban angelegt ($SUDOERS_FILE)."
-    else
-        warn "Sudoers-Syntax ungültig – Regel wird entfernt. fail2ban-Status im Dashboard nicht verfügbar."
-        rm -f "$SUDOERS_FILE"
     fi
 else
     info "fail2ban übersprungen. Das Sicherheits-Dashboard zeigt dann 'nicht verfügbar'."

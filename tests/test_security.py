@@ -216,12 +216,12 @@ class TestSessionManager:
 class TestFail2banService:
     def test_is_available_when_missing(self):
         from app.services import fail2ban as fb
-        with patch("shutil.which", return_value=None):
+        with patch("os.path.exists", return_value=False):
             assert fb.is_available() is False
 
     def test_is_available_when_present(self):
         from app.services import fail2ban as fb
-        with patch("shutil.which", return_value="/usr/bin/fail2ban-client"):
+        with patch("os.path.exists", return_value=True):
             assert fb.is_available() is True
 
     def test_get_status_not_available(self):
@@ -232,12 +232,12 @@ class TestFail2banService:
         assert result["error"] is not None
 
     def test_get_status_parses_jails(self):
+        import pickle
         from app.services import fail2ban as fb
-        mock_result = MagicMock()
-        mock_result.returncode = 0
-        mock_result.stdout = "Status\n|- Number of jail:\t2\n`- Jail list:\tsshd, nginx-http-auth\n"
+        # fail2ban antwortet: [0, [("Number of jail", 2), ("Jail list", "sshd, nginx-http-auth")]]
+        response = pickle.dumps([0, [("Number of jail", 2), ("Jail list", "sshd, nginx-http-auth")]], 2)
         with patch.object(fb, "is_available", return_value=True), \
-             patch("subprocess.run", return_value=mock_result):
+             patch.object(fb, "_send", return_value=([("Number of jail", 2), ("Jail list", "sshd, nginx-http-auth")], None)):
             result = fb.get_status()
         assert "sshd" in result["jails"]
         assert "nginx-http-auth" in result["jails"]
@@ -245,11 +245,8 @@ class TestFail2banService:
 
     def test_get_status_on_error(self):
         from app.services import fail2ban as fb
-        mock_result = MagicMock()
-        mock_result.returncode = 1
-        mock_result.stderr = "fail2ban is not running"
         with patch.object(fb, "is_available", return_value=True), \
-             patch("subprocess.run", return_value=mock_result):
+             patch.object(fb, "_send", return_value=(None, "fail2ban ist nicht erreichbar")):
             result = fb.get_status()
         assert result["error"] is not None
 
@@ -260,20 +257,19 @@ class TestFail2banService:
 
     def test_get_jail_status_parses_output(self):
         from app.services import fail2ban as fb
-        raw = (
-            "Status for the jail: sshd\n"
-            "|- Filter\n"
-            "|  `- Currently failed:\t3\n"
-            "|  `- Total failed:\t42\n"
-            "`- Actions\n"
-            "   |- Currently banned:\t2\n"
-            "   `- Banned IP list:\t1.2.3.4 5.6.7.8\n"
-        )
-        mock_result = MagicMock()
-        mock_result.returncode = 0
-        mock_result.stdout = raw
+        payload = [
+            ("Filter", [
+                ("Currently failed", 3),
+                ("Total failed", 42),
+            ]),
+            ("Actions", [
+                ("Currently banned", 2),
+                ("Total banned", 10),
+                ("Banned IP list", ["1.2.3.4", "5.6.7.8"]),
+            ]),
+        ]
         with patch.object(fb, "is_available", return_value=True), \
-             patch("subprocess.run", return_value=mock_result):
+             patch.object(fb, "_send", return_value=(payload, None)):
             result = fb.get_jail_status("sshd")
         assert result["total_banned"] == 2
         assert result["total_failed"] == 42
@@ -281,10 +277,10 @@ class TestFail2banService:
         assert result["error"] is None
 
     def test_get_jail_status_timeout(self):
-        import subprocess
+        import socket
         from app.services import fail2ban as fb
         with patch.object(fb, "is_available", return_value=True), \
-             patch("subprocess.run", side_effect=subprocess.TimeoutExpired("fail2ban-client", 5)):
+             patch.object(fb, "_send", return_value=(None, "Timeout beim Verbinden mit fail2ban.")):
             result = fb.get_jail_status("sshd")
         assert result["error"] is not None
 
