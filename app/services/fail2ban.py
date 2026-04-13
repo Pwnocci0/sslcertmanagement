@@ -14,9 +14,25 @@ _JAIL_RE = re.compile(r"^[a-zA-Z0-9_-]+$")
 _TIMEOUT = 5  # Sekunden
 
 
+def _fail2ban_bin() -> str | None:
+    """Gibt den Pfad zu fail2ban-client zurück oder None."""
+    return shutil.which("fail2ban-client")
+
+
 def is_available() -> bool:
     """Gibt True zurück wenn fail2ban-client im PATH verfügbar ist."""
-    return shutil.which("fail2ban-client") is not None
+    return _fail2ban_bin() is not None
+
+
+def _run(args: list[str]) -> subprocess.CompletedProcess:
+    """Führt fail2ban-client via sudo aus (Sudoers-Regel erforderlich)."""
+    bin_path = _fail2ban_bin() or "fail2ban-client"
+    return subprocess.run(
+        ["sudo", bin_path] + args,
+        capture_output=True,
+        text=True,
+        timeout=_TIMEOUT,
+    )
 
 
 def get_status() -> dict:
@@ -28,12 +44,7 @@ def get_status() -> dict:
         return {"jails": [], "error": "fail2ban-client nicht gefunden."}
 
     try:
-        result = subprocess.run(
-            ["fail2ban-client", "status"],
-            capture_output=True,
-            text=True,
-            timeout=_TIMEOUT,
-        )
+        result = _run(["status"])
         if result.returncode != 0:
             return {
                 "jails": [],
@@ -67,12 +78,7 @@ def get_jail_status(jail: str) -> dict:
         return {"banned_ips": [], "total_failed": 0, "total_banned": 0, "raw": "", "error": "fail2ban-client nicht gefunden."}
 
     try:
-        result = subprocess.run(
-            ["fail2ban-client", "status", jail],
-            capture_output=True,
-            text=True,
-            timeout=_TIMEOUT,
-        )
+        result = _run(["status", jail])
         if result.returncode != 0:
             return {
                 "banned_ips": [],

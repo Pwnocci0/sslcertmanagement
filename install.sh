@@ -719,6 +719,22 @@ FAIL2BAN_EOF
     else
         warn "fail2ban konnte nicht gestartet werden. Prüfe: systemctl status fail2ban"
     fi
+
+    # Sudoers-Regel: certmgr darf fail2ban-client status (read-only) ohne Passwort
+    F2B_BIN="$(command -v fail2ban-client 2>/dev/null || echo /usr/bin/fail2ban-client)"
+    SUDOERS_FILE="/etc/sudoers.d/certmgr-fail2ban"
+    cat > "$SUDOERS_FILE" <<SUDOERS_EOF
+# Erlaubt dem certmgr-Dienst, den fail2ban-Status abzufragen (read-only)
+${APP_USER} ALL=(root) NOPASSWD: ${F2B_BIN} status, ${F2B_BIN} status *
+SUDOERS_EOF
+    chmod 440 "$SUDOERS_FILE"
+    # Syntax prüfen
+    if visudo -cf "$SUDOERS_FILE" >/dev/null 2>&1; then
+        info "Sudoers-Regel für fail2ban angelegt ($SUDOERS_FILE)."
+    else
+        warn "Sudoers-Syntax ungültig – Regel wird entfernt. fail2ban-Status im Dashboard nicht verfügbar."
+        rm -f "$SUDOERS_FILE"
+    fi
 else
     info "fail2ban übersprungen. Das Sicherheits-Dashboard zeigt dann 'nicht verfügbar'."
 fi
