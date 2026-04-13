@@ -51,8 +51,8 @@ async def settings_index(
 
     svc = get_settings_service(db)
     grouped_all = svc.get_all_by_category()
-    # SMTP → /mail-settings, TheSSLStore → /settings/integrations
-    excluded = {"smtp", "thesslstore"}
+    # SMTP → /mail-settings, TheSSLStore → /settings/integrations, Security → /security
+    excluded = {"smtp", "thesslstore", "security"}
     grouped = {k: v for k, v in grouped_all.items() if k not in excluded}
     category_labels = {k: v for k, v in CATEGORY_LABELS.items() if k not in excluded}
 
@@ -96,6 +96,8 @@ async def settings_save(
         defn = DEFINITIONS[key]
         if defn.category == "smtp":
             continue  # SMTP wird über /mail-settings verwaltet
+        if defn.category == "security":
+            continue  # Security wird über /security verwaltet
         if key in _UPLOAD_MANAGED_KEYS:
             continue  # Favicon/Logo werden über Upload-Endpunkte verwaltet
         if defn.value_type == "bool":

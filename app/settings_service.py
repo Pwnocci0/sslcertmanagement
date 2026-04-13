@@ -135,6 +135,18 @@ DEFINITIONS: dict[str, SettingDef] = {
         label="Recovery Codes regenerieren erlauben",
         description="Erlaubt Benutzern, ihre MFA-Recovery Codes selbst neu zu erzeugen.",
     ),
+    "security.lockout_window_minutes": SettingDef(
+        default="15",
+        value_type="int", category="security", is_sensitive=False,
+        label="Sperr-Zeitfenster (Minuten)",
+        description="Zeitfenster, in dem fehlgeschlagene Login-Versuche gezählt werden.",
+    ),
+    "security.stepup_duration_seconds": SettingDef(
+        default="300",
+        value_type="int", category="security", is_sensitive=False,
+        label="Step-up Gültigkeitsdauer (Sekunden)",
+        description="Wie lange ein Step-up-Token nach Bestätigung gültig ist (60–3600).",
+    ),
 
     # ── Netzwerk ──────────────────────────────────────────────────────────────
     "network.trust_proxy": SettingDef(

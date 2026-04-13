@@ -8,7 +8,7 @@
     {% if user.is_admin %}
     <a href="/settings"
        class="list-group-item list-group-item-action py-2 {% if p == '/settings' %}active{% endif %}">
-      <i class="bi bi-sliders me-2"></i>Allgemein &amp; Sicherheit
+      <i class="bi bi-sliders me-2"></i>Allgemein
     </a>
 
     <div class="list-group-item list-group-item-light py-1 px-3 text-uppercase small fw-bold text-muted border-top" style="font-size:.7rem;letter-spacing:.06em">
@@ -73,6 +73,11 @@
     <a href="/backups"
        class="list-group-item list-group-item-action py-2 {% if p.startswith('/backups') %}active{% endif %}">
       <i class="bi bi-archive me-2"></i>Backups
+    </a>
+
+    <a href="/security"
+       class="list-group-item list-group-item-action py-2 {% if p.startswith('/security') %}active{% endif %}">
+      <i class="bi bi-shield-lock me-2"></i>Sicherheit
     </a>
     {% endif %}
   </div>

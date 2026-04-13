@@ -180,6 +180,13 @@ async def recovery_codes_confirm(
     request.session["user_id"] = uid
     request.session["username"] = user.username
 
+    # UserSession anlegen
+    from ..services.session_manager import create_session as _create_session
+    ip = _client_ip(request)
+    ua = request.headers.get("User-Agent", "")
+    token = _create_session(db, uid, ip, ua)
+    request.session["session_id"] = token
+
     return RedirectResponse(url="/", status_code=302)
 
 
@@ -262,5 +269,12 @@ async def mfa_verify_post(
     uid = request.session.pop("pre_mfa_user_id", None)
     request.session["user_id"] = uid
     request.session["username"] = user.username
+
+    # UserSession anlegen für Sitzungsverwaltung
+    from ..services.session_manager import create_session as _create_session
+    ip = _client_ip(request)
+    ua = request.headers.get("User-Agent", "")
+    token = _create_session(db, uid, ip, ua)
+    request.session["session_id"] = token
 
     return RedirectResponse(url="/", status_code=302)

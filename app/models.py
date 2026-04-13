@@ -459,6 +459,39 @@ class AuditLog(Base):
         return f"<AuditLog {self.action} by user_id={self.user_id}>"
 
 
+class LoginAttempt(Base):
+    """Protokoll aller Login-Versuche (Erfolg und Misserfolg)."""
+    __tablename__ = "login_attempts"
+
+    id = Column(Integer, primary_key=True, index=True)
+    username = Column(String(50), nullable=False, index=True)
+    ip_address = Column(String(45), nullable=False, index=True)
+    success = Column(Boolean, default=False, nullable=False)
+    created_at = Column(DateTime, default=func.now(), nullable=False, index=True)
+
+    def __repr__(self):
+        return f"<LoginAttempt {self.username} {'ok' if self.success else 'fail'}>"
+
+
+class UserSession(Base):
+    """Aktive Benutzersitzungen mit Token-Hash zur Validierung."""
+    __tablename__ = "user_sessions"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    session_token_hash = Column(String(64), nullable=False, unique=True, index=True)  # SHA-256
+    ip_address = Column(String(45), nullable=True)
+    user_agent = Column(String(255), nullable=True)
+    created_at = Column(DateTime, default=func.now(), nullable=False)
+    last_seen_at = Column(DateTime, default=func.now(), nullable=False)
+    is_active = Column(Boolean, default=True, nullable=False, index=True)
+
+    user = relationship("User")
+
+    def __repr__(self):
+        return f"<UserSession user_id={self.user_id} active={self.is_active}>"
+
+
 class Backup(Base):
     """Metadaten zu erstellten Backups (global oder pro Kundengruppe)."""
     __tablename__ = "backups"

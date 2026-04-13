@@ -15,14 +15,42 @@ def verify_password(plain: str, hashed: str) -> bool:
 
 
 def get_current_user(request: Request, db: Session) -> models.User | None:
-    """Gibt den vollständig authentifizierten User zurück (Passwort + MFA)."""
+    """Gibt den vollständig authentifizierten User zurück (Passwort + MFA).
+
+    Validiert zusätzlich das Session-Token gegen die DB, falls vorhanden.
+    Bestehende Sessions ohne Token werden lazy auf DB-Sessions migriert.
+    """
     user_id = request.session.get("user_id")
     if not user_id:
         return None
-    return db.query(models.User).filter(
+
+    user = db.query(models.User).filter(
         models.User.id == user_id,
         models.User.is_active == True,
     ).first()
+    if not user:
+        return None
+
+    session_token = request.session.get("session_id")
+    if session_token:
+        from .services.session_manager import validate_session
+        sess = validate_session(db, session_token)
+        if not sess or sess.user_id != user.id:
+            request.session.clear()
+            return None
+    else:
+        # Lazy-Migration: Session ohne Token → Token erstellen
+        from .services.session_manager import create_session
+        ip = request.headers.get("X-Forwarded-For", "")
+        if ip:
+            ip = ip.split(",")[0].strip()
+        else:
+            ip = request.client.host if request.client else ""
+        ua = request.headers.get("User-Agent", "")
+        token = create_session(db, user.id, ip, ua)
+        request.session["session_id"] = token
+
+    return user
 
 
 def login_required(request: Request, db: Session):

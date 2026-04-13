@@ -12,7 +12,7 @@ from .database import Base, engine
 from .routers import (
     admin, auth, backups, certificates, csrs, csrtemplates, customer_groups, customers,
     dashboard, domains, exports, mail_settings, mailtemplates, mfa, notifications,
-    profile, report, settings, stepup, tasks, thesslstore,
+    profile, report, security, settings, stepup, tasks, thesslstore,
 )
 from .scheduler import shutdown_scheduler, start_scheduler, trigger_cert_status_update
 from .templates_config import templates as _jinja_templates
@@ -121,6 +121,7 @@ app.include_router(notifications.router)
 app.include_router(backups.router)
 app.include_router(profile.router)
 app.include_router(report.router)
+app.include_router(security.router)
 
 # Tabellen beim Start anlegen (nur für SQLite-Dev, nicht für Produktions-Migrations-Workflow)
 Base.metadata.create_all(bind=engine)

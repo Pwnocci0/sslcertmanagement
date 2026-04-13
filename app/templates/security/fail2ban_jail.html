@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+{% block title %}fail2ban Jail: {{ jail }} – {{ app_name }}{% endblock %}
+
+{% block content %}
+<div class="d-flex align-items-center mb-4 gap-2">
+  <a href="/security#fail2ban" class="btn btn-outline-secondary btn-sm">
+    <i class="bi bi-arrow-left"></i>
+  </a>
+  <i class="bi bi-shield-shaded fs-3 text-warning"></i>
+  <h1 class="h3 mb-0">fail2ban Jail: <code>{{ jail }}</code></h1>
+</div>
+
+{% if jail_data.error %}
+<div class="alert alert-warning">
+  <i class="bi bi-exclamation-triangle me-2"></i>{{ jail_data.error }}
+</div>
+{% else %}
+
+<div class="row g-3 mb-4">
+  <div class="col-sm-4">
+    <div class="card text-center">
+      <div class="card-body">
+        <div class="fs-1 fw-bold {% if jail_data.total_banned > 0 %}text-danger{% else %}text-success{% endif %}">
+          {{ jail_data.total_banned }}
+        </div>
+        <div class="text-muted small">Aktuell gebannt</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-sm-4">
+    <div class="card text-center">
+      <div class="card-body">
+        <div class="fs-1 fw-bold text-warning">{{ jail_data.total_failed }}</div>
+        <div class="text-muted small">Fehlgeschlagene Versuche (gesamt)</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-sm-4">
+    <div class="card text-center">
+      <div class="card-body">
+        <div class="fs-1 fw-bold text-secondary">{{ jail_data.banned_ips | length }}</div>
+        <div class="text-muted small">Gebannte IPs</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+{% if jail_data.banned_ips %}
+<div class="card mb-4">
+  <div class="card-header fw-semibold">Gebannte IP-Adressen</div>
+  <div class="card-body p-0">
+    <table class="table table-sm mb-0">
+      <tbody>
+        {% for ip in jail_data.banned_ips %}
+        <tr>
+          <td class="ps-3"><code>{{ ip }}</code></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+
+<div class="card">
+  <div class="card-header fw-semibold">Rohausgabe</div>
+  <div class="card-body">
+    <pre class="mb-0 small text-muted">{{ jail_data.raw }}</pre>
+  </div>
+</div>
+
+{% endif %}
+{% endblock %}

@@ -11,7 +11,20 @@ import time
 from fastapi import Request
 from fastapi.responses import RedirectResponse
 
-STEPUP_DURATION = 300  # Sekunden (5 Minuten)
+STEPUP_DURATION = 300  # Fallback-Wert (5 Minuten)
+
+
+def _get_stepup_duration() -> int:
+    """Liest die Step-up-Dauer aus dem Settings-Cache (kein DB-Zugriff nötig)."""
+    try:
+        from .settings_service import _cache, _cache_valid  # noqa: PLC0415
+        if _cache_valid:
+            v = _cache.get("security.stepup_duration_seconds")
+            if v:
+                return max(60, min(3600, int(v)))
+    except Exception:
+        pass
+    return STEPUP_DURATION
 
 # Bekannte sensible Aktionen und ihre Bezeichnungen
 ACTIONS: dict[str, str] = {
@@ -48,7 +61,7 @@ def grant_stepup(request: Request, action: str, reason: str = "") -> None:
     """Speichert einen Step-up-Token in der Session."""
     request.session["stepup"] = {
         "action": action,
-        "expires": int(time.time()) + STEPUP_DURATION,
+        "expires": int(time.time()) + _get_stepup_duration(),
         "reason": reason,
     }
 

@@ -1,0 +1,332 @@
+{% extends "base.html" %}
+{% block title %}Sicherheit – {{ app_name }}{% endblock %}
+
+{% block content %}
+<div class="row g-4">
+  {% include "settings/_sidebar.html" %}
+
+  <div class="col-lg-10 col-md-9">
+
+    <div class="d-flex align-items-center mb-4">
+      <i class="bi bi-shield-lock fs-3 text-secondary me-2"></i>
+      <h1 class="h3 mb-0">Sicherheit</h1>
+    </div>
+
+    {% if flash %}
+    <div class="alert alert-{{ flash.type }} alert-dismissible fade show" role="alert">
+      {% if flash.type == 'success' %}<i class="bi bi-check-circle-fill me-2"></i>
+      {% elif flash.type == 'danger' %}<i class="bi bi-x-circle-fill me-2"></i>
+      {% elif flash.type == 'warning' %}<i class="bi bi-exclamation-triangle-fill me-2"></i>
+      {% else %}<i class="bi bi-info-circle-fill me-2"></i>{% endif %}
+      {{ flash.msg }}
+      <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+    {% endif %}
+
+    <!-- Tabs -->
+    <ul class="nav nav-tabs mb-4" id="securityTabs" role="tablist">
+      <li class="nav-item" role="presentation">
+        <button class="nav-link active" id="overview-tab" data-bs-toggle="tab" data-bs-target="#overview" type="button" role="tab">
+          <i class="bi bi-speedometer2 me-1"></i>Übersicht
+        </button>
+      </li>
+      <li class="nav-item" role="presentation">
+        <button class="nav-link" id="sessions-tab" data-bs-toggle="tab" data-bs-target="#sessions" type="button" role="tab">
+          <i class="bi bi-display me-1"></i>Sitzungen
+          <span class="badge bg-primary ms-1">{{ active_sessions | length }}</span>
+        </button>
+      </li>
+      <li class="nav-item" role="presentation">
+        <button class="nav-link" id="attempts-tab" data-bs-toggle="tab" data-bs-target="#attempts" type="button" role="tab">
+          <i class="bi bi-key me-1"></i>Anmeldeversuche
+        </button>
+      </li>
+      <li class="nav-item" role="presentation">
+        <button class="nav-link" id="fail2ban-tab" data-bs-toggle="tab" data-bs-target="#fail2ban" type="button" role="tab">
+          <i class="bi bi-shield-exclamation me-1"></i>fail2ban
+        </button>
+      </li>
+      <li class="nav-item" role="presentation">
+        <button class="nav-link" id="settings-tab" data-bs-toggle="tab" data-bs-target="#settings-pane" type="button" role="tab">
+          <i class="bi bi-sliders me-1"></i>Einstellungen
+        </button>
+      </li>
+    </ul>
+
+    <div class="tab-content" id="securityTabContent">
+
+      <!-- ── Übersicht ───────────────────────────────────────────────────── -->
+      <div class="tab-pane fade show active" id="overview" role="tabpanel">
+        <div class="row g-3 mb-4">
+          <div class="col-sm-4">
+            <div class="card text-center h-100">
+              <div class="card-body">
+                <div class="fs-1 fw-bold text-success">{{ stats_24h.success }}</div>
+                <div class="text-muted small">Erfolgreiche Logins (24 h)</div>
+              </div>
+            </div>
+          </div>
+          <div class="col-sm-4">
+            <div class="card text-center h-100">
+              <div class="card-body">
+                <div class="fs-1 fw-bold {% if stats_24h.failed > 0 %}text-danger{% else %}text-success{% endif %}">
+                  {{ stats_24h.failed }}
+                </div>
+                <div class="text-muted small">Fehlgeschlagene Logins (24 h)</div>
+              </div>
+            </div>
+          </div>
+          <div class="col-sm-4">
+            <div class="card text-center h-100">
+              <div class="card-body">
+                <div class="fs-1 fw-bold text-primary">{{ active_sessions | length }}</div>
+                <div class="text-muted small">Aktive Sitzungen</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-header fw-semibold">Sicherheitsübersicht</div>
+          <div class="card-body p-0">
+            <table class="table table-sm mb-0">
+              <tbody>
+                {% for s in security_settings %}
+                <tr>
+                  <td class="ps-3 text-muted" style="width:45%">{{ s.label }}</td>
+                  <td>
+                    {% if s.value_type == 'bool' %}
+                      {% if s.value in ('true', '1', 'yes', 'on') %}
+                        <span class="badge bg-success">Aktiv</span>
+                      {% else %}
+                        <span class="badge bg-secondary">Deaktiviert</span>
+                      {% endif %}
+                    {% else %}
+                      <code>{{ s.value }}</code>
+                    {% endif %}
+                  </td>
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── Sitzungen ──────────────────────────────────────────────────── -->
+      <div class="tab-pane fade" id="sessions" role="tabpanel">
+        <p class="text-muted small mb-3">
+          Aktive Benutzersitzungen. Ein Widerruf meldet den Benutzer beim nächsten Request ab.
+        </p>
+        {% if active_sessions %}
+        <div class="table-responsive">
+          <table class="table table-hover align-middle">
+            <thead class="table-light">
+              <tr>
+                <th>#</th>
+                <th>Benutzer</th>
+                <th>IP-Adresse</th>
+                <th>User-Agent</th>
+                <th>Erstellt</th>
+                <th>Zuletzt gesehen</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for sess in active_sessions %}
+              <tr {% if sess.session_token_hash == current_token_hash %}class="table-primary"{% endif %}>
+                <td class="text-muted small">{{ sess.id }}</td>
+                <td>
+                  <strong>{{ sess.user.username if sess.user else sess.user_id }}</strong>
+                  {% if sess.user and sess.user.is_admin %}
+                    <span class="badge bg-danger ms-1">Admin</span>
+                  {% endif %}
+                </td>
+                <td><code class="small">{{ sess.ip_address or '–' }}</code></td>
+                <td class="text-muted small" style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="{{ sess.user_agent }}">
+                  {{ sess.user_agent or '–' }}
+                </td>
+                <td class="small text-muted">{{ sess.created_at.strftime('%d.%m.%Y %H:%M') }}</td>
+                <td class="small text-muted">{{ sess.last_seen_at.strftime('%d.%m.%Y %H:%M') }}</td>
+                <td>
+                  <form method="post" action="/security/sessions/{{ sess.id }}/revoke"
+                        onsubmit="return confirm('Sitzung #{{ sess.id }} wirklich widerrufen?')">
+                    <button type="submit" class="btn btn-outline-danger btn-sm">
+                      <i class="bi bi-x-circle"></i>
+                    </button>
+                  </form>
+                </td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+
+        <!-- Alle Sessions eines Users widerrufen -->
+        <div class="card mt-3">
+          <div class="card-header fw-semibold">Alle Sitzungen eines Benutzers widerrufen</div>
+          <div class="card-body">
+            <form method="post" id="revokeAllForm">
+              <div class="input-group" style="max-width:400px">
+                <select name="target_user_id" class="form-select" id="revokeUserSelect" required>
+                  <option value="">Benutzer wählen…</option>
+                  {% set seen_users = [] %}
+                  {% for sess in active_sessions %}
+                    {% if sess.user and sess.user_id not in seen_users %}
+                      {% set _ = seen_users.append(sess.user_id) %}
+                      <option value="{{ sess.user_id }}">{{ sess.user.username }} ({{ sess.user_id }})</option>
+                    {% endif %}
+                  {% endfor %}
+                </select>
+                <button type="submit" class="btn btn-outline-danger"
+                        onclick="this.form.action='/security/sessions/revoke-all-for-user/' + document.getElementById('revokeUserSelect').value; return confirm('Alle Sitzungen für diesen Benutzer widerrufen?')">
+                  Alle widerrufen
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+        {% else %}
+        <div class="text-center text-muted py-5">
+          <i class="bi bi-display fs-1 d-block mb-2"></i>
+          Keine aktiven Sitzungen.
+        </div>
+        {% endif %}
+      </div>
+
+      <!-- ── Anmeldeversuche ────────────────────────────────────────────── -->
+      <div class="tab-pane fade" id="attempts" role="tabpanel">
+        <p class="text-muted small mb-3">
+          Die letzten 50 Login-Versuche (Echtzeit aus DB).
+        </p>
+        {% if recent_attempts %}
+        <div class="table-responsive">
+          <table class="table table-hover table-sm align-middle">
+            <thead class="table-light">
+              <tr>
+                <th>Zeitpunkt</th>
+                <th>Benutzername</th>
+                <th>IP-Adresse</th>
+                <th>Ergebnis</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for a in recent_attempts %}
+              <tr>
+                <td class="small text-muted">{{ a.created_at.strftime('%d.%m.%Y %H:%M:%S') }}</td>
+                <td><code>{{ a.username }}</code></td>
+                <td><code>{{ a.ip_address }}</code></td>
+                <td>
+                  {% if a.success %}
+                    <span class="badge bg-success">Erfolgreich</span>
+                  {% else %}
+                    <span class="badge bg-danger">Fehlgeschlagen</span>
+                  {% endif %}
+                </td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        {% else %}
+        <div class="text-center text-muted py-5">
+          <i class="bi bi-key fs-1 d-block mb-2"></i>
+          Keine Login-Versuche protokolliert.
+        </div>
+        {% endif %}
+      </div>
+
+      <!-- ── fail2ban ───────────────────────────────────────────────────── -->
+      <div class="tab-pane fade" id="fail2ban" role="tabpanel">
+        {% if not fb_available %}
+        <div class="alert alert-secondary">
+          <i class="bi bi-info-circle me-2"></i>
+          <strong>fail2ban nicht verfügbar.</strong>
+          fail2ban-client wurde nicht im Systempfad gefunden.
+        </div>
+        {% elif fb_status.error %}
+        <div class="alert alert-warning">
+          <i class="bi bi-exclamation-triangle me-2"></i>
+          <strong>Fehler:</strong> {{ fb_status.error }}
+        </div>
+        {% else %}
+        <p class="text-muted small mb-3">
+          Read-only Ansicht des fail2ban-Status. Keine Aktionen über die App möglich.
+        </p>
+        {% if fb_status.jails %}
+        <div class="list-group">
+          {% for jail in fb_status.jails %}
+          <a href="/security/fail2ban/jail/{{ jail }}"
+             class="list-group-item list-group-item-action d-flex justify-content-between align-items-center">
+            <span><i class="bi bi-shield-shaded me-2 text-warning"></i><strong>{{ jail }}</strong></span>
+            <i class="bi bi-chevron-right text-muted"></i>
+          </a>
+          {% endfor %}
+        </div>
+        {% else %}
+        <div class="text-center text-muted py-5">
+          <i class="bi bi-shield-check fs-1 d-block mb-2"></i>
+          fail2ban läuft, aber keine Jails konfiguriert.
+        </div>
+        {% endif %}
+        {% endif %}
+      </div>
+
+      <!-- ── Sicherheitseinstellungen ──────────────────────────────────── -->
+      <div class="tab-pane fade" id="settings-pane" role="tabpanel">
+        <form method="post" action="/security/settings">
+          <div class="card">
+            <div class="card-header fw-semibold">Sicherheitseinstellungen</div>
+            <div class="card-body">
+              <div class="row g-3">
+                {% for s in security_settings %}
+                <div class="col-md-6">
+                  <label class="form-label fw-semibold">{{ s.label }}</label>
+                  {% if s.value_type == 'bool' %}
+                  <div class="form-check form-switch">
+                    <input class="form-check-input" type="checkbox" name="{{ s.key }}"
+                           id="setting_{{ s.key | replace('.', '_') }}"
+                           {% if s.value in ('true', '1', 'yes', 'on') %}checked{% endif %}>
+                    <label class="form-check-label text-muted small" for="setting_{{ s.key | replace('.', '_') }}">
+                      {{ s.description }}
+                    </label>
+                  </div>
+                  {% elif s.value_type == 'int' %}
+                  <input type="number" class="form-control" name="{{ s.key }}" value="{{ s.value }}">
+                  {% if s.description %}
+                  <div class="form-text text-muted">{{ s.description }}</div>
+                  {% endif %}
+                  {% else %}
+                  <input type="text" class="form-control" name="{{ s.key }}" value="{{ s.value }}">
+                  {% if s.description %}
+                  <div class="form-text text-muted">{{ s.description }}</div>
+                  {% endif %}
+                  {% endif %}
+                </div>
+                {% endfor %}
+              </div>
+            </div>
+            <div class="card-footer text-end">
+              <button type="submit" class="btn btn-primary">
+                <i class="bi bi-save me-1"></i>Speichern
+              </button>
+            </div>
+          </div>
+        </form>
+      </div>
+
+    </div><!-- tab-content -->
+  </div><!-- col -->
+</div><!-- row -->
+
+<script>
+// Tab aus URL-Fragment aktivieren
+(function () {
+  const hash = location.hash;
+  if (hash) {
+    const tab = document.querySelector('[data-bs-target="' + hash + '"], [data-bs-target="' + hash + '-pane"]');
+    if (tab) { new bootstrap.Tab(tab).show(); }
+  }
+})();
+</script>
+{% endblock %}

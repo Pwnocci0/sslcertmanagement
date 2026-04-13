@@ -256,6 +256,15 @@ else
         rsync curl >/dev/null
 fi
 
+# fail2ban (optional)
+echo ""
+read -r -p "  fail2ban installieren und aktivieren? (empfohlen für Produktivbetrieb) [J/n]: " _FAIL2BAN_INPUT
+_FAIL2BAN_INPUT="${_FAIL2BAN_INPUT:-J}"
+INSTALL_FAIL2BAN=false
+if [[ "$_FAIL2BAN_INPUT" =~ ^[JjYy]$ ]]; then
+    INSTALL_FAIL2BAN=true
+fi
+
 # Python ermitteln
 PYTHON_BIN=""
 for candidate in python3.13 python3.12 python3.11 python3.10 python3; do
@@ -684,6 +693,36 @@ EXTEOF
 fi  # Ende Modus B
 
 # ─── Initiale App-Einstellungen in DB schreiben ───────────────────────────────
+# ─── fail2ban einrichten (optional) ──────────────────────────────────────────
+if [[ "$INSTALL_FAIL2BAN" == "true" ]]; then
+    step "fail2ban installieren und konfigurieren"
+
+    apt-get install -y --no-install-recommends fail2ban >/dev/null
+    info "fail2ban installiert."
+
+    # Lokale Jail-Konfiguration anlegen (überschreibt keine Paket-Defaults)
+    cat > /etc/fail2ban/jail.local <<'FAIL2BAN_EOF'
+[DEFAULT]
+bantime  = 1800
+findtime = 600
+maxretry = 5
+backend  = systemd
+
+[sshd]
+enabled = true
+FAIL2BAN_EOF
+
+    systemctl enable fail2ban --quiet
+    systemctl restart fail2ban
+    if systemctl is-active --quiet fail2ban; then
+        info "fail2ban gestartet (SSH-Jail aktiv, Banzeit 30 min, 5 Versuche in 10 min)."
+    else
+        warn "fail2ban konnte nicht gestartet werden. Prüfe: systemctl status fail2ban"
+    fi
+else
+    info "fail2ban übersprungen. Das Sicherheits-Dashboard zeigt dann 'nicht verfügbar'."
+fi
+
 step "App-Einstellungen initialisieren"
 
 # Basis-URL ableiten

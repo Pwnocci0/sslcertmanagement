@@ -138,7 +138,7 @@ class TestExportCsr:
         csr, enc_key = _make_csr_model(with_key=True)
 
         with patch("app.crypto.decrypt_private_key") as mock_dk:
-            mock_dk.return_value = "-----BEGIN RSA PRIVATE KEY-----\nfake\n-----END RSA PRIVATE KEY-----"
+            mock_dk.return_value = b"-----BEGIN RSA PRIVATE KEY-----\nfake\n-----END RSA PRIVATE KEY-----"
             manifest = export_csr(csr, include_key=True)
 
         assert "private_key_pem" in manifest["data"]
@@ -191,7 +191,7 @@ class TestExportCertificate:
         from app.services.import_export import export_certificate
         cert = _make_cert_model()
         with patch("app.crypto.decrypt_private_key") as mock_dk:
-            mock_dk.return_value = "-----BEGIN RSA PRIVATE KEY-----\nfake\n-----END RSA PRIVATE KEY-----"
+            mock_dk.return_value = b"-----BEGIN RSA PRIVATE KEY-----\nfake\n-----END RSA PRIVATE KEY-----"
             manifest = export_certificate(cert, include_key=True)
         assert "private_key_pem" in manifest["data"]
 
