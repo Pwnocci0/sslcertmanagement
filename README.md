@@ -4,6 +4,29 @@ Interne Webanwendung zur Verwaltung von SSL-Zertifikaten für einen MSP.
 
 **Stack:** Python · FastAPI · Jinja2 · SQLite · systemd · Nginx (optional)
 
+**Repository:** [github.com/Pwnocci0/sslcertmanagement](https://github.com/Pwnocci0/sslcertmanagement)
+
+---
+
+## Inhaltsverzeichnis
+
+1. [Installation](#installation-debian--ubuntu--lxc-auf-proxmox)
+   - [Modus A: Lokaler Nginx + Let's Encrypt](#modus-a-lokaler-nginx--lets-encrypt)
+   - [Modus B: Externer Reverse Proxy](#modus-b-externer-reverse-proxy)
+   - [Was der Installer erledigt](#was-der-installer-automatisch-erledigt)
+   - [Verzeichnisstruktur](#verzeichnisstruktur-nach-installation)
+2. [Konfiguration (.env)](#konfiguration-env)
+3. [Betrieb](#betrieb)
+4. [Entwicklung (lokal)](#entwicklung-lokal)
+5. [Zwei-Faktor-Authentifizierung (MFA)](#zwei-faktor-authentifizierung-mfa)
+6. [Sicherheitshinweise](#sicherheitshinweise)
+7. [Datenmodell](#datenmodell)
+8. [Menüstruktur](#menüstruktur)
+9. [Einstellungen](#einstellungen)
+10. [Integrationen](#integrationen)
+11. [Zertifikats-Workflow](#zertifikats-workflow)
+12. [E-Mail-Benachrichtigungen](#e-mail-benachrichtigungen)
+
 ---
 
 ## Installation (Debian / Ubuntu / LXC auf Proxmox)
@@ -29,7 +52,7 @@ sudo apt install -y python3 python3-venv python3-pip git
 **1. Projekt auf den Server kopieren**
 
 ```bash
-git clone <repo-url> /tmp/certmgr-src
+git clone https://github.com/Pwnocci0/sslcertmanagement /tmp/certmgr-src
 cd /tmp/certmgr-src
 # Alternativ: scp/SFTP, dann ins Verzeichnis wechseln.
 ```
@@ -46,22 +69,22 @@ Der Installer fragt interaktiv ab:
 |---|---|---|
 | Domain | `ssl.example.de` | – (Pflicht) |
 | Anwendungsname | `Mein SSL Manager` | `SSL Cert Management` |
-| **Modus** | `1` oder `2` | – (Pflicht) |
-| E-Mail (nur Modus 1) | `admin@example.de` | – (Pflicht) |
-| App-Port (nur Modus 2) | `8000` | `8000` |
-| Bind-Adresse (nur Modus 2) | `1` = 127.0.0.1 / `2` = 0.0.0.0 | `1` |
+| **Modus** | `A` oder `B` | – (Pflicht) |
+| E-Mail (nur Modus A) | `admin@example.de` | – (Pflicht) |
+| App-Port (nur Modus B) | `8000` | `8000` |
+| Bind-Adresse (nur Modus B) | `1` = 127.0.0.1 / `2` = 0.0.0.0 | `1` |
 | Installationspfad | `/opt/certmgr` | `/opt/certmgr` |
 
 ---
 
-## Modus 1: Lokaler Nginx + Let's Encrypt
+## Modus A: Lokaler Nginx + Let's Encrypt
 
 Für Server, auf denen Nginx direkt installiert wird.
 
 ```
 ./install.sh
 → Domain eingeben
-→ Modus 1 wählen
+→ Modus A wählen
 → E-Mail eingeben
 → kurze Wartezeit
 → https://ssl.example.de + Login-Daten
@@ -82,14 +105,14 @@ certbot --nginx -d ssl.example.de --email admin@example.de --agree-tos --non-int
 
 ---
 
-## Modus 2: Externer Reverse Proxy
+## Modus B: Externer Reverse Proxy
 
 Für Umgebungen mit einem zentralen Nginx oder Traefik auf einem anderen Server (z. B. in einem separaten LXC-Container oder VM).
 
 ```
 ./install.sh
 → Domain eingeben
-→ Modus 2 wählen
+→ Modus B wählen
 → App-Port + Bind-Adresse eingeben
 → kurze Wartezeit
 → interne Adresse + Login-Daten + Nginx-Beispielconfig
@@ -144,7 +167,7 @@ Die Zugangsdaten werden außerdem gespeichert unter:
 
 ## Was der Installer automatisch erledigt
 
-| Schritt | Modus 1 | Modus 2 |
+| Schritt | Modus A | Modus B |
 |---|---|---|
 | Systempakete | Python 3, Nginx, Certbot, rsync | Python 3, rsync |
 | System-Benutzer `certmgr` | ✓ | ✓ |
