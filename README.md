@@ -8,24 +8,86 @@ Interne Webanwendung zur Verwaltung von SSL-Zertifikaten für einen MSP.
 
 ---
 
+## Features
+
+### Zertifikatsverwaltung
+- Zertifikate anlegen, importieren, archivieren und nach Status filtern (`active` · `expiring_soon` · `expired` · `pending` · `revoked`)
+- Ablauf-Übersicht mit konfigurierbarem Zeitfenster (14 / 30 / 60 / 90 / 180 Tage)
+- Farbige Statusanzeige und Tage-bis-Ablauf-Badges im Dashboard und in allen Listen
+- Zertifikats-Anhänge und interne Notizen (Verlaufsprotokoll)
+- PFX-Export mit Passwortschutz (erfordert Step-up-Authentifizierung)
+
+### CSR-Verwaltung
+- CSR und RSA Private Key (2048 / 3072 / 4096 Bit) direkt im Browser generieren
+- Private Key AES-verschlüsselt in der Datenbank – Klartext-Download nur nach Step-up
+- **CSR-Vorlagen:** wiederverwendbare Vorlagen mit `{cn}`-Platzhalter für SANs, inkl. Standardvorlage
+- **Kunden-Defaults:** pro Kunde hinterlegte Subject-Felder (C, ST, L, O, OU) werden beim Auswählen des Kunden automatisch vorausgefüllt
+
+### Kundenverwaltung
+- Kundenstammdaten mit Kontakt, Notizen und weicher Archivierung
+- Kunden-Defaults (CSR-Voreinstellungen, bevorzugte Produktlaufzeit, technische Notizen)
+- Zuordnung zu Kundengruppen für rollenbasierte Zugriffsteuerung
+
+### Benutzerverwaltung & Sicherheit
+- Zwei Rollen: **Admin** (Vollzugriff) und **Techniker** (Zugriff nur auf zugeordnete Kundengruppen)
+- **Zwei-Faktor-Authentifizierung (TOTP)** – Pflicht für alle Nutzer, Recovery Codes als HMAC-SHA256-Hashes
+- **Step-up-Authentifizierung** für sensible Aktionen (Private Key, PFX-Export)
+- Login-Schutz mit konfigurierbarer Sperrung nach Fehlversuchen (per IP und Benutzername)
+- Session-Management: aktive Sitzungen einsehen und einzeln oder alle widerrufen
+- Passwortregeln und Session-Timeout konfigurierbar
+
+### Dashboard & Analytics
+- KPI-Karten: Kunden, aktive Zertifikate, Ablauf < 30 Tage, abgelaufene Zertifikate
+- Interaktive Chart.js-Grafiken: Status-Donut, Ablauf-Balken, Aussteller-Vergleich
+- **Analytics-Seite** mit Zertifikats-Tabs, Sicherheits-Tab (Admins) und Infrastruktur-Tab
+- CSV-Export für Zertifikatsdaten und Sicherheitsberichte
+
+### E-Mail-Benachrichtigungen
+- Automatische Benachrichtigungen bei Ablauf (30 Tage / 14 Tage / abgelaufen / ungültig / fehlende Chain)
+- Konfigurierbare Mailtemplates mit `{{Platzhalter}}`-Syntax
+- Benachrichtigungen pro Kundengruppe steuerbar (Typ- und Schweregrad-Filter)
+- Duplikatschutz, Versandhistorie mit Filterung
+
+### Audit-Log & Protokollierung
+- Alle sicherheitsrelevanten Aktionen werden in `audit_logs` erfasst (wer, was, wann, von wo)
+- Filterbares Audit-Log unter `/admin/audit` mit CSV- und JSON-Export
+- Anwendungslogs mit konfigurierbarer Retention-Dauer
+
+### Integrationen & Infrastruktur
+- **TheSSLStore:** Produkt-Sync, Bestellverwaltung, Sandbox/Live-Toggle (optional aktivierbar)
+- **Let's Encrypt** (Modus A): Zertifikatsstatus aus `/etc/letsencrypt/live/` auslesen, Renewal per Trigger-Datei anstoßen (kein Subprocess, kein Root-Zugriff aus der App)
+- **fail2ban:** gebannte IPs und aktive Sperren im Sicherheits-Dashboard sichtbar
+- **Backups:** automatische Tages-Backups, manueller Download, Wiederherstellung
+- APScheduler-Hintergrundjobs: Benachrichtigungen (stündlich), Zertifikatsstatus (00:30 UTC), Backup (00:05 UTC), Log-Cleanup (01:00 UTC), LE-Renewal-Check (03:00 UTC)
+
+### Installation & Betrieb
+- Einzeiliger Installer (`install.sh`) für Debian/Ubuntu/LXC auf Proxmox
+- Modus A: lokaler Nginx + Let's Encrypt vollautomatisch
+- Modus B: externer Reverse Proxy (generiert fertige Nginx-Beispielkonfig)
+- Idempotenter Installer – kann für Updates erneut ausgeführt werden
+- systemd-Service mit `NoNewPrivileges`, `PrivateTmp`, `ProtectSystem`
+
+---
+
 ## Inhaltsverzeichnis
 
-1. [Installation](#installation-debian--ubuntu--lxc-auf-proxmox)
+1. [Features](#features)
+2. [Installation](#installation-debian--ubuntu--lxc-auf-proxmox)
    - [Modus A: Lokaler Nginx + Let's Encrypt](#modus-a-lokaler-nginx--lets-encrypt)
    - [Modus B: Externer Reverse Proxy](#modus-b-externer-reverse-proxy)
    - [Was der Installer erledigt](#was-der-installer-automatisch-erledigt)
    - [Verzeichnisstruktur](#verzeichnisstruktur-nach-installation)
-2. [Konfiguration (.env)](#konfiguration-env)
-3. [Betrieb](#betrieb)
-4. [Entwicklung (lokal)](#entwicklung-lokal)
-5. [Zwei-Faktor-Authentifizierung (MFA)](#zwei-faktor-authentifizierung-mfa)
-6. [Sicherheitshinweise](#sicherheitshinweise)
-7. [Datenmodell](#datenmodell)
-8. [Menüstruktur](#menüstruktur)
-9. [Einstellungen](#einstellungen)
-10. [Integrationen](#integrationen)
-11. [Zertifikats-Workflow](#zertifikats-workflow)
-12. [E-Mail-Benachrichtigungen](#e-mail-benachrichtigungen)
+3. [Konfiguration (.env)](#konfiguration-env)
+4. [Betrieb](#betrieb)
+5. [Entwicklung (lokal)](#entwicklung-lokal)
+6. [Zwei-Faktor-Authentifizierung (MFA)](#zwei-faktor-authentifizierung-mfa)
+7. [Sicherheitshinweise](#sicherheitshinweise)
+8. [Datenmodell](#datenmodell)
+9. [Menüstruktur](#menüstruktur)
+10. [Einstellungen](#einstellungen)
+11. [Integrationen](#integrationen)
+12. [Zertifikats-Workflow](#zertifikats-workflow)
+13. [E-Mail-Benachrichtigungen](#e-mail-benachrichtigungen)
 
 ---
 
