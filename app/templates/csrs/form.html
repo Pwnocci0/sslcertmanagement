@@ -121,8 +121,29 @@
 
   </div>
 
-  <!-- Rechte Spalte: Key + Zuordnung -->
+  <!-- Rechte Spalte: Vorlage + Key + Zuordnung -->
   <div class="col-lg-5">
+
+    <!-- Vorlage -->
+    {% if csr_templates %}
+    <div class="card border-0 shadow-sm mb-3">
+      <div class="card-header bg-white fw-semibold border-bottom">
+        <i class="bi bi-file-earmark-text me-1 text-secondary"></i>Vorlage
+      </div>
+      <div class="card-body">
+        <select id="template_select" class="form-select">
+          <option value="">– Keine Vorlage –</option>
+          {% for t in csr_templates %}
+          <option value="{{ t.id }}"
+            {% if selected_template_id == t.id %}selected{% endif %}>
+            {{ t.name }}{% if t.is_default %} (Standard){% endif %}
+          </option>
+          {% endfor %}
+        </select>
+        <div class="form-text">Vorlage auswählen, um Felder automatisch auszufüllen.</div>
+      </div>
+    </div>
+    {% endif %}
 
     <!-- Key-Einstellungen -->
     <div class="card border-0 shadow-sm mb-3">
@@ -214,5 +235,61 @@
 document.getElementById('country').addEventListener('input', function() {
   this.value = this.value.toUpperCase();
 });
+
+{% if csr_templates %}
+// Eingebettete Vorlagendaten für clientseitiges Prefill
+const CSR_TEMPLATES = {
+  {% for t in csr_templates %}
+  {{ t.id }}: {
+    country: {{ (t.country or '') | tojson }},
+    state: {{ (t.state or '') | tojson }},
+    locality: {{ (t.locality or '') | tojson }},
+    organization: {{ (t.organization or '') | tojson }},
+    ou: {{ (t.organizational_unit or '') | tojson }},
+    key_size: {{ t.key_size }},
+    san_pattern: {{ (t.san_pattern or '') | tojson }},
+  }{% if not loop.last %},{% endif %}
+
+  {% endfor %}
+};
+
+function applyTemplate(tmpl) {
+  document.getElementById('country').value = tmpl.country;
+  document.getElementById('state').value = tmpl.state;
+  document.getElementById('locality').value = tmpl.locality;
+  document.getElementById('organization').value = tmpl.organization;
+  document.getElementById('ou').value = tmpl.ou;
+  const radio = document.querySelector('input[name="key_size"][value="' + tmpl.key_size + '"]');
+  if (radio) radio.checked = true;
+  const cn = document.getElementById('common_name').value;
+  const sansEl = document.getElementById('sans');
+  sansEl.dataset.sanPattern = tmpl.san_pattern;
+  sansEl.value = tmpl.san_pattern ? tmpl.san_pattern.replace(/\{cn\}/g, cn) : '';
+}
+
+document.getElementById('template_select').addEventListener('change', function() {
+  const id = parseInt(this.value);
+  if (id && CSR_TEMPLATES[id]) {
+    applyTemplate(CSR_TEMPLATES[id]);
+  }
+});
+
+// CN-Änderung: SANs aktualisieren wenn Muster {cn} enthält
+document.getElementById('common_name').addEventListener('input', function() {
+  const sansEl = document.getElementById('sans');
+  const pattern = sansEl.dataset.sanPattern || '';
+  if (pattern.includes('{cn}')) {
+    sansEl.value = pattern.replace(/\{cn\}/g, this.value);
+  }
+});
+
+// Initialen san_pattern aus ausgewählter Vorlage setzen
+(function() {
+  const selectedId = {{ selected_template_id | tojson }};
+  if (selectedId && CSR_TEMPLATES[selectedId]) {
+    document.getElementById('sans').dataset.sanPattern = CSR_TEMPLATES[selectedId].san_pattern;
+  }
+})();
+{% endif %}
 </script>
 {% endblock %}

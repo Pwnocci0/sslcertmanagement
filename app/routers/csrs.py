@@ -89,9 +89,38 @@ async def csr_new(request: Request, db: Session = Depends(get_db)):
         dom_q = dom_q.filter(models.Domain.customer_id.in_(accessible_ids))
     domains = dom_q.order_by(models.Domain.fqdn).all()
 
-    csr_templates = db.query(models.CsrTemplate).order_by(
+    csr_templates_list = db.query(models.CsrTemplate).order_by(
         models.CsrTemplate.is_default.desc(), models.CsrTemplate.name
     ).all()
+
+    # Determine selected template (explicit > default)
+    selected_template = None
+    tid = request.query_params.get("template_id", "")
+    if tid.isdigit():
+        selected_template = db.query(models.CsrTemplate).filter(
+            models.CsrTemplate.id == int(tid)
+        ).first()
+    if selected_template is None:
+        selected_template = next((t for t in csr_templates_list if t.is_default), None)
+
+    # Pre-fill form from template
+    form: dict = {}
+    if selected_template:
+        form = {
+            "country": selected_template.country or "",
+            "state": selected_template.state or "",
+            "locality": selected_template.locality or "",
+            "organization": selected_template.organization or "",
+            "ou": selected_template.organizational_unit or "",
+            "key_size": selected_template.key_size,
+            "sans": selected_template.san_pattern or "",
+        }
+
+    # Allow pre-selecting customer/domain via query params
+    if request.query_params.get("customer_id", "").isdigit():
+        form["customer_id"] = request.query_params["customer_id"]
+    if request.query_params.get("domain_id", "").isdigit():
+        form["domain_id"] = request.query_params["domain_id"]
 
     return templates.TemplateResponse(
         "csrs/form.html",
@@ -101,9 +130,10 @@ async def csr_new(request: Request, db: Session = Depends(get_db)):
             "customers": customers,
             "domains": domains,
             "key_sizes": models.KEY_SIZE_CHOICES,
-            "csr_templates": csr_templates,
+            "csr_templates": csr_templates_list,
+            "selected_template_id": selected_template.id if selected_template else None,
             "error": None,
-            "form": {},
+            "form": form,
             "flash": None,
         },
     )
@@ -167,6 +197,7 @@ async def csr_create(
                 "customers": customers, "domains": domains,
                 "key_sizes": models.KEY_SIZE_CHOICES,
                 "csr_templates": csr_templates,
+                "selected_template_id": None,
                 "error": msg, "form": form_data, "flash": None,
             },
             status_code=422,
