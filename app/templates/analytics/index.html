@@ -189,12 +189,15 @@
             {% set fb = security_data.fail2ban %}
             {% if fb.error %}
             <div class="fs-2 fw-bold text-muted">–</div>
+            <div class="text-muted small">Fail2ban</div>
+            <div class="text-muted" style="font-size:.75rem">nicht verfügbar</div>
             {% else %}
             <div class="fs-2 fw-bold {% if fb.jails %}text-success{% else %}text-muted{% endif %}">
               {{ fb.jails | length }}
             </div>
-            {% endif %}
             <div class="text-muted small">Fail2ban Jails</div>
+            <div class="text-muted" style="font-size:.75rem">konfiguriert (aktive Bans siehe unten)</div>
+            {% endif %}
           </div>
         </div>
       </div>
@@ -218,7 +221,7 @@
         {% if security_data.fail2ban.jails %}
         <div class="d-flex flex-wrap gap-2">
           {% for jail in security_data.fail2ban.jails %}
-          <a href="/security/fail2ban/{{ jail }}" class="badge bg-warning text-dark text-decoration-none">
+          <a href="/security/fail2ban/jail/{{ jail }}" class="badge bg-warning text-dark text-decoration-none">
             {{ jail }}
           </a>
           {% endfor %}
