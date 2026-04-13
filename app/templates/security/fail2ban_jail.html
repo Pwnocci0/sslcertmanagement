@@ -47,7 +47,7 @@
 
 {% if jail_data.banned_ips %}
 <div class="card mb-4">
-  <div class="card-header fw-semibold">Gebannte IP-Adressen</div>
+  <div class="card-header fw-semibold">Aktuell gebannte IP-Adressen</div>
   <div class="card-body p-0">
     <table class="table table-sm mb-0">
       <tbody>
@@ -60,14 +60,11 @@
     </table>
   </div>
 </div>
-{% endif %}
-
-<div class="card">
-  <div class="card-header fw-semibold">Rohausgabe</div>
-  <div class="card-body">
-    <pre class="mb-0 small text-muted">{{ jail_data.raw }}</pre>
-  </div>
+{% else %}
+<div class="alert alert-success">
+  <i class="bi bi-shield-check me-2"></i>Keine aktiven Bans in diesem Jail.
 </div>
+{% endif %}
 
 {% endif %}
 {% endblock %}

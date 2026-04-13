@@ -293,45 +293,21 @@
             </tr>
           </tbody>
         </table>
-        <div class="px-3 pb-3 pt-1">
+        <div class="px-3 pb-3 pt-1 d-flex gap-2 align-items-center">
           <form method="post" action="/admin/cleanup-logs"
                 onsubmit="return confirm('Log-Cleanup jetzt ausführen?\n\nEinträge älter als {{ status.retention_days }} Tage werden gelöscht.')">
             <button type="submit" class="btn btn-sm btn-outline-warning">
               <i class="bi bi-trash me-1"></i>Cleanup jetzt ausführen
             </button>
           </form>
+          <a href="/settings#maintenance" class="btn btn-sm btn-outline-secondary">
+            <i class="bi bi-sliders me-1"></i>Aufbewahrung konfigurieren
+          </a>
         </div>
       </div>
     </div>
   </div>
 
-  <!-- Log-Retention-Einstellung -->
-  <div class="col-md-6">
-    <div class="card border-0 shadow-sm h-100">
-      <div class="card-header bg-transparent fw-semibold">
-        <i class="bi bi-gear me-1"></i>Log-Aufbewahrung konfigurieren
-      </div>
-      <div class="card-body">
-        <p class="text-muted small mb-3">
-          Audit-Log-Einträge älter als der angegebene Wert werden täglich automatisch gelöscht.
-          Der Cleanup läuft täglich um 01:00 UTC.
-        </p>
-        <form method="post" action="/admin/save-retention" class="row g-2 align-items-end">
-          <div class="col-8">
-            <label class="form-label small fw-semibold">Aufbewahrung (Tage)</label>
-            <input type="number" name="retention_days" class="form-control form-control-sm"
-                   value="{{ status.retention_days }}" min="1" max="3650" required>
-          </div>
-          <div class="col-4">
-            <button type="submit" class="btn btn-primary btn-sm w-100">
-              <i class="bi bi-floppy me-1"></i>Speichern
-            </button>
-          </div>
-        </form>
-        <div class="form-text">Min. 1 Tag, max. 3650 Tage (ca. 10 Jahre).</div>
-      </div>
-    </div>
-  </div>
 
   <!-- TheSSLStore (nur wenn aktiviert) -->
   {% if status.thesslstore_enabled %}

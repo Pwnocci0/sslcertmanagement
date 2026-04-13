@@ -712,27 +712,6 @@ backend  = systemd
 enabled = true
 FAIL2BAN_EOF
 
-    # fail2ban-Gruppe anlegen und certmgr hinzufügen
-    groupadd --system fail2ban 2>/dev/null || true
-    usermod -aG fail2ban "$APP_USER"
-    info "Benutzer $APP_USER zur Gruppe fail2ban hinzugefügt."
-
-    # systemd Drop-in: Socket-Gruppe nach Start auf fail2ban setzen
-    F2B_DROPIN_DIR="/etc/systemd/system/fail2ban.service.d"
-    mkdir -p "$F2B_DROPIN_DIR"
-    cat > "${F2B_DROPIN_DIR}/socket-group.conf" <<'F2B_DROPIN_EOF'
-[Service]
-# Socket nach dem Start für die fail2ban-Gruppe freigeben (read-write)
-ExecStartPost=/bin/bash -c \
-  'for i in 1 2 3 4 5; do \
-     [ -S /var/run/fail2ban/fail2ban.sock ] && break || sleep 1; \
-   done; \
-   chgrp fail2ban /var/run/fail2ban/fail2ban.sock && \
-   chmod g+rw /var/run/fail2ban/fail2ban.sock'
-F2B_DROPIN_EOF
-    info "systemd Drop-in angelegt (${F2B_DROPIN_DIR}/socket-group.conf)."
-
-    systemctl daemon-reload
     systemctl enable fail2ban --quiet
     systemctl restart fail2ban
     if systemctl is-active --quiet fail2ban; then
@@ -740,6 +719,33 @@ F2B_DROPIN_EOF
     else
         warn "fail2ban konnte nicht gestartet werden. Prüfe: systemctl status fail2ban"
     fi
+
+    # fail2ban-Gruppe anlegen, certmgr hinzufügen und DB-Datei freigeben
+    # Die App liest direkt aus der SQLite-DB (kein Socket/sudo nötig)
+    groupadd --system fail2ban 2>/dev/null || true
+    usermod -aG fail2ban "$APP_USER"
+
+    # Datenbankverzeichnis und -datei für die fail2ban-Gruppe lesbar machen
+    F2B_DB="/var/lib/fail2ban/fail2ban.sqlite3"
+    F2B_DB_DIR="/var/lib/fail2ban"
+    if [[ -d "$F2B_DB_DIR" ]]; then
+        chgrp fail2ban "$F2B_DB_DIR"
+        chmod g+rx "$F2B_DB_DIR"
+    fi
+    if [[ -f "$F2B_DB" ]]; then
+        chgrp fail2ban "$F2B_DB"
+        chmod g+r "$F2B_DB"
+    fi
+
+    # systemd Drop-in: DB-Berechtigungen nach fail2ban-Neustart wiederherstellen
+    F2B_DROPIN_DIR="/etc/systemd/system/fail2ban.service.d"
+    mkdir -p "$F2B_DROPIN_DIR"
+    cat > "${F2B_DROPIN_DIR}/db-perms.conf" <<F2B_DROPIN_EOF
+[Service]
+ExecStartPost=/bin/bash -c 'chgrp fail2ban ${F2B_DB_DIR} ${F2B_DB} 2>/dev/null; chmod g+rx ${F2B_DB_DIR} 2>/dev/null; chmod g+r ${F2B_DB} 2>/dev/null; true'
+F2B_DROPIN_EOF
+    systemctl daemon-reload
+    info "fail2ban-Datenbankzugriff für $APP_USER eingerichtet."
 else
     info "fail2ban übersprungen. Das Sicherheits-Dashboard zeigt dann 'nicht verfügbar'."
 fi

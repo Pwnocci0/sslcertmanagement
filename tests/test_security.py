@@ -216,12 +216,13 @@ class TestSessionManager:
 class TestFail2banService:
     def test_is_available_when_missing(self):
         from app.services import fail2ban as fb
-        with patch("os.path.exists", return_value=False):
+        with patch("os.path.isfile", return_value=False):
             assert fb.is_available() is False
 
     def test_is_available_when_present(self):
         from app.services import fail2ban as fb
-        with patch("os.path.exists", return_value=True):
+        with patch("os.path.isfile", return_value=True), \
+             patch("os.access", return_value=True):
             assert fb.is_available() is True
 
     def test_get_status_not_available(self):
@@ -231,22 +232,29 @@ class TestFail2banService:
         assert result["jails"] == []
         assert result["error"] is not None
 
-    def test_get_status_parses_jails(self):
-        import pickle
+    def _make_db_mock(self, rows):
+        """Hilfe: erzeugt einen korrekt konfigurierten DB-Connection-Mock."""
+        mock_conn = MagicMock()
+        mock_conn.__enter__ = MagicMock(return_value=mock_conn)
+        mock_conn.__exit__ = MagicMock(return_value=False)
+        mock_conn.execute.return_value.fetchall.return_value = rows
+        return mock_conn
+
+    def test_get_status_reads_db(self):
         from app.services import fail2ban as fb
-        # fail2ban antwortet: [0, [("Number of jail", 2), ("Jail list", "sshd, nginx-http-auth")]]
-        response = pickle.dumps([0, [("Number of jail", 2), ("Jail list", "sshd, nginx-http-auth")]], 2)
+        mock_conn = self._make_db_mock([("sshd",), ("nginx-http-auth",)])
         with patch.object(fb, "is_available", return_value=True), \
-             patch.object(fb, "_send", return_value=([("Number of jail", 2), ("Jail list", "sshd, nginx-http-auth")], None)):
+             patch.object(fb, "_connect", return_value=mock_conn):
             result = fb.get_status()
         assert "sshd" in result["jails"]
         assert "nginx-http-auth" in result["jails"]
         assert result["error"] is None
 
-    def test_get_status_on_error(self):
+    def test_get_status_db_error(self):
+        import sqlite3
         from app.services import fail2ban as fb
         with patch.object(fb, "is_available", return_value=True), \
-             patch.object(fb, "_send", return_value=(None, "fail2ban ist nicht erreichbar")):
+             patch.object(fb, "_connect", side_effect=sqlite3.OperationalError("no such table")):
             result = fb.get_status()
         assert result["error"] is not None
 
@@ -255,34 +263,43 @@ class TestFail2banService:
         result = fb.get_jail_status("../../etc/passwd")
         assert result["error"] is not None
 
-    def test_get_jail_status_parses_output(self):
+    def test_get_jail_status_active_ban(self):
+        import json, time
         from app.services import fail2ban as fb
-        payload = [
-            ("Filter", [
-                ("Currently failed", 3),
-                ("Total failed", 42),
-            ]),
-            ("Actions", [
-                ("Currently banned", 2),
-                ("Total banned", 10),
-                ("Banned IP list", ["1.2.3.4", "5.6.7.8"]),
-            ]),
-        ]
-        with patch.object(fb, "is_available", return_value=True), \
-             patch.object(fb, "_send", return_value=(payload, None)):
-            result = fb.get_jail_status("sshd")
-        assert result["total_banned"] == 2
-        assert result["total_failed"] == 42
-        assert "1.2.3.4" in result["banned_ips"]
-        assert result["error"] is None
 
-    def test_get_jail_status_timeout(self):
-        import socket
-        from app.services import fail2ban as fb
+        fixed_now = int(time.time())
+        active_data = json.dumps({"failures": 5, "bantime": 3600})
+        expired_data = json.dumps({"failures": 3, "bantime": 60})
+        rows = [
+            ("1.2.3.4", fixed_now - 10, active_data),    # aktiv
+            ("5.6.7.8", fixed_now - 3700, expired_data),  # abgelaufen
+        ]
+        mock_conn = self._make_db_mock(rows)
         with patch.object(fb, "is_available", return_value=True), \
-             patch.object(fb, "_send", return_value=(None, "Timeout beim Verbinden mit fail2ban.")):
+             patch.object(fb, "_connect", return_value=mock_conn), \
+             patch.object(fb, "_now", return_value=fixed_now):
             result = fb.get_jail_status("sshd")
-        assert result["error"] is not None
+
+        assert result["error"] is None
+        assert "1.2.3.4" in result["banned_ips"]
+        assert "5.6.7.8" not in result["banned_ips"]
+        assert result["total_banned"] == 1
+        assert result["total_failed"] == 8
+
+    def test_get_jail_status_permanent_ban(self):
+        import json, time
+        from app.services import fail2ban as fb
+
+        fixed_now = int(time.time())
+        perm_data = json.dumps({"failures": 10, "bantime": -1})
+        rows = [("9.9.9.9", fixed_now - 99999, perm_data)]
+        mock_conn = self._make_db_mock(rows)
+        with patch.object(fb, "is_available", return_value=True), \
+             patch.object(fb, "_connect", return_value=mock_conn), \
+             patch.object(fb, "_now", return_value=fixed_now):
+            result = fb.get_jail_status("sshd")
+
+        assert "9.9.9.9" in result["banned_ips"]
 
 
 # ── stepup: dynamische Dauer ──────────────────────────────────────────────────

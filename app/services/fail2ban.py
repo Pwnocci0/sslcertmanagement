@@ -1,134 +1,104 @@
-"""Schreibgeschützte fail2ban-Status-Abfrage.
+"""Schreibgeschützte fail2ban-Status-Abfrage via SQLite-Datenbank.
 
-Kommuniziert direkt mit dem fail2ban Unix-Socket via Python (kein Subprocess).
-Voraussetzung: certmgr-User hat Lesezugriff auf /var/run/fail2ban/fail2ban.sock
-(via Gruppenberechtigungen – wird durch install.sh eingerichtet).
-
-Keine modifizierenden Aktionen (kein Ban/Unban über die App).
+Liest direkt aus der fail2ban-Datenbank – kein Subprocess, kein Socket,
+kein sudo erforderlich. Die Datei muss für die fail2ban-Gruppe lesbar sein
+(wird durch install.sh eingerichtet).
 """
 from __future__ import annotations
 
+import json
 import os
-import pickle
 import re
-import socket as _socket
+import sqlite3
+from datetime import datetime
 
-_SOCK_PATH = "/var/run/fail2ban/fail2ban.sock"
+_DB_PATH = "/var/lib/fail2ban/fail2ban.sqlite3"
 _JAIL_RE = re.compile(r"^[a-zA-Z0-9_-]+$")
-_TIMEOUT = 5  # Sekunden
+_DEFAULT_BANTIME = 600  # Sekunden – fail2ban-Standard
 
 
 def is_available() -> bool:
-    """Gibt True zurück wenn der fail2ban-Socket existiert und erreichbar ist."""
-    return os.path.exists(_SOCK_PATH)
+    """True wenn die fail2ban-Datenbank existiert und lesbar ist."""
+    return os.path.isfile(_DB_PATH) and os.access(_DB_PATH, os.R_OK)
 
 
-def _send(cmd: list) -> tuple[object, str | None]:
-    """
-    Sendet einen Befehl an den fail2ban-Socket und gibt (result, error) zurück.
-    Protokoll: pickle-serialisiert, Verbindung über Unix-Socket.
-    """
-    try:
-        s = _socket.socket(_socket.AF_UNIX, _socket.SOCK_STREAM)
-        s.settimeout(_TIMEOUT)
-        s.connect(_SOCK_PATH)
-        try:
-            s.sendall(pickle.dumps(cmd, protocol=2))
-            s.shutdown(_socket.SHUT_WR)
-            data = b""
-            while True:
-                chunk = s.recv(4096)
-                if not chunk:
-                    break
-                data += chunk
-        finally:
-            s.close()
+def _connect() -> sqlite3.Connection:
+    return sqlite3.connect(f"file:{_DB_PATH}?mode=ro", uri=True, timeout=3)
 
-        result = pickle.loads(data)  # noqa: S301 – lokaler Unix-Socket, vertrauenswürdig
-        # fail2ban antwortet mit [return_code, payload]
-        if isinstance(result, list) and len(result) == 2 and result[0] == 0:
-            return result[1], None
-        return None, f"fail2ban Fehlercode: {result}"
 
-    except PermissionError:
-        return None, (
-            "Kein Zugriff auf den fail2ban-Socket. "
-            "Stelle sicher, dass der certmgr-User Mitglied der fail2ban-Gruppe ist "
-            "und der systemd Drop-in eingerichtet wurde (install.sh ausführen)."
-        )
-    except _socket.timeout:
-        return None, "Timeout beim Verbinden mit fail2ban."
-    except FileNotFoundError:
-        return None, "fail2ban-Socket nicht gefunden (/var/run/fail2ban/fail2ban.sock)."
-    except Exception as exc:
-        return None, str(exc)
+def _now() -> int:
+    return int(datetime.utcnow().timestamp())
 
 
 def get_status() -> dict:
     """
-    Gibt globalen fail2ban-Status zurück.
+    Gibt Liste der konfigurierten Jails zurück.
     Rückgabe: {"jails": [...], "error": str|None}
     """
     if not is_available():
-        return {"jails": [], "error": "fail2ban läuft nicht (Socket nicht gefunden)."}
-
-    payload, err = _send(["status"])
-    if err:
-        return {"jails": [], "error": err}
-
-    # payload: [("Number of jail", N), ("Jail list", "sshd, nginx-http-auth")]
-    jails: list[str] = []
+        return {
+            "jails": [],
+            "error": (
+                "fail2ban-Datenbank nicht gefunden oder nicht lesbar. "
+                "fail2ban installiert? (install.sh)"
+            ),
+        }
     try:
-        for key, val in payload:
-            if "jail list" in key.lower():
-                jails = [j.strip() for j in str(val).split(",") if j.strip()]
+        with _connect() as conn:
+            rows = conn.execute(
+                "SELECT name FROM jails WHERE enabled = 1 ORDER BY name"
+            ).fetchall()
+        return {"jails": [r[0] for r in rows], "error": None}
+    except sqlite3.OperationalError as exc:
+        return {"jails": [], "error": f"Datenbankfehler: {exc}"}
     except Exception as exc:
-        return {"jails": [], "error": f"Antwort konnte nicht geparst werden: {exc}"}
-
-    return {"jails": jails, "error": None}
+        return {"jails": [], "error": str(exc)}
 
 
 def get_jail_status(jail: str) -> dict:
     """
     Gibt Status eines einzelnen Jails zurück.
-    Rückgabe: {"banned_ips": [...], "total_failed": int, "total_banned": int, "error": str|None}
+    Rückgabe: {"banned_ips": [...], "total_banned": int, "total_failed": int, "error": str|None}
     """
-    _empty = {"banned_ips": [], "total_failed": 0, "total_banned": 0, "error": None}
+    _empty = {"banned_ips": [], "total_banned": 0, "total_failed": 0, "error": None}
 
     if not _JAIL_RE.match(jail):
         return {**_empty, "error": "Ungültiger Jail-Name."}
 
     if not is_available():
-        return {**_empty, "error": "fail2ban läuft nicht."}
-
-    payload, err = _send(["status", jail])
-    if err:
-        return {**_empty, "error": err}
-
-    # payload: [("Filter", [...]), ("Actions", [...])]
-    banned_ips: list[str] = []
-    total_failed = 0
-    total_banned = 0
+        return {**_empty, "error": "fail2ban-Datenbank nicht zugänglich."}
 
     try:
-        for section_name, section_data in payload:
-            for key, val in section_data:
-                k = key.lower()
-                if "currently banned" in k:
-                    total_banned = int(val)
-                elif "total failed" in k:
-                    total_failed = int(val)
-                elif "banned ip list" in k:
-                    if isinstance(val, list):
-                        banned_ips = [str(ip) for ip in val if ip]
-                    elif val:
-                        banned_ips = [ip.strip() for ip in str(val).split() if ip.strip()]
+        now = _now()
+        with _connect() as conn:
+            rows = conn.execute(
+                "SELECT ip, timeofban, data FROM bans WHERE jail = ?",
+                (jail,),
+            ).fetchall()
+    except sqlite3.OperationalError as exc:
+        return {**_empty, "error": f"Datenbankfehler: {exc}"}
     except Exception as exc:
-        return {**_empty, "error": f"Antwort konnte nicht geparst werden: {exc}"}
+        return {**_empty, "error": str(exc)}
+
+    banned_ips: list[str] = []
+    total_failed = 0
+
+    for ip, timeofban, data_raw in rows:
+        try:
+            data: dict = json.loads(data_raw) if data_raw else {}
+        except (json.JSONDecodeError, TypeError):
+            data = {}
+
+        bantime: int = data.get("bantime", _DEFAULT_BANTIME)
+        total_failed += data.get("failures", 0)
+
+        # Permanente Bans (bantime < 0) oder noch nicht abgelaufen
+        if bantime < 0 or timeofban + bantime > now:
+            banned_ips.append(ip)
 
     return {
         "banned_ips": banned_ips,
+        "total_banned": len(banned_ips),
         "total_failed": total_failed,
-        "total_banned": total_banned,
         "error": None,
     }
